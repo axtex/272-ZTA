@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+ 
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DISABLED
+}
+
+enum DecisionType {
+  ALLOW
+  DENY
+  STEP_UP
+}
+
+model User {
+  id               String       @id @default(uuid()) @db.Uuid
+  username         String       @unique @db.VarChar(50)
+  email            String       @unique @db.VarChar(100)
+  passwordHash     String       @map("password_hash")
+  roleId           String       @map("role_id") @db.Uuid
+  mfaSecret        String?      @map("mfa_secret") @db.VarChar(255)
+  mfaEnabled       Boolean      @default(false) @map("mfa_enabled")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  status           UserStatus   @default(ACTIVE)
+
+  role             Role         @relation(fields: [roleId], references: [id])
+  patientProfile   Patient?     @relation("PatientUser")
+  devices          Device[]
+  ehrAsDoctor      EHR[]        @relation("DoctorEHR")
+  assignedPatients Patient[]    @relation("AssignedDoctor")
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id               String             @id @default(uuid()) @db.Uuid
+  roleName         String             @unique @map("role_name") @db.VarChar(50)
+  description      String?
+
+  users            User[]
+  rolePermissions  RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id               String             @id @default(uuid()) @db.Uuid
+  permissionName   String             @map("permission_name") @db.VarChar(100)
+  resource         String             @db.VarChar(100)
+  action           String             @db.VarChar(50)
+
+  rolePermissions  RolePermission[]
+
+  @@unique([permissionName, resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id               String       @id @default(uuid()) @db.Uuid
+  roleId           String       @map("role_id") @db.Uuid
+  permissionId     String       @map("permission_id") @db.Uuid
+
+  role             Role         @relation(fields: [roleId], references: [id])
+  permission       Permission   @relation(fields: [permissionId], references: [id])
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Patient {
+  id                   String      @id @default(uuid()) @db.Uuid
+  userId               String      @unique @map("user_id") @db.Uuid
+  medicalRecordNumber  String      @unique @map("medical_record_number") @db.VarChar(50)
+  assignedDoctorId     String?     @map("assigned_doctor_id") @db.Uuid
+  createdAt            DateTime    @default(now()) @map("created_at")
+
+  user                 User        @relation("PatientUser", fields: [userId], references: [id])
+  assignedDoctor       User?       @relation("AssignedDoctor", fields: [assignedDoctorId], references: [id])
+  ehrRecords           EHR[]
+
+  @@map("patients")
+}
+
+model Device {
+  id                String      @id @default(uuid()) @db.Uuid
+  userId            String      @map("user_id") @db.Uuid
+  deviceFingerprint String      @unique @map("device_fingerprint") @db.VarChar(255)
+  isTrusted         Boolean     @default(false) @map("is_trusted")
+  lastIpAddress     String?     @map("last_ip_address") @db.VarChar(100)
+  lastActive        DateTime?   @map("last_active")
+
+  user              User        @relation(fields: [userId], references: [id])
+
+  @@map("devices")
+}
+
+model EHR {
+  id            String      @id @default(uuid()) @db.Uuid
+  patientId     String      @map("patient_id") @db.Uuid
+  doctorId      String      @map("doctor_id") @db.Uuid
+  diagnosis     String
+  vitals        Json?
+  s3FileKey     String?     @map("s3_file_key") @db.VarChar(255)
+  updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  patient       Patient     @relation(fields: [patientId], references: [id])
+  doctor        User        @relation("DoctorEHR", fields: [doctorId], references: [id])
+
+  @@map("ehr")
+}
+
+model AuditLog {
+  id           String        @id @default(uuid()) @db.Uuid
+  timestamp    DateTime      @default(now())
+  userId       String?       @map("user_id") @db.Uuid
+  action       String        @db.VarChar(100)
+  resourceId   String?       @map("resource_id") @db.VarChar(100)
+  decision     DecisionType
+  trustScore   Int?          @map("trust_score")
+  ipAddress    String?       @map("ip_address") @db.VarChar(100)
+
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@map("audit_logs")
+}
