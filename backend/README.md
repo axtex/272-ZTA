@@ -11,7 +11,6 @@ Database (PostgreSQL + Prisma):
 2. In `backend/`, copy `.env.example` to `.env` and set `DATABASE_URL`.
 
    - **Docker (above):** use the URL already in `.env.example`.
-   - **Hosted (Neon, Supabase, Railway, …):** paste your provider’s connection string. Share a team dev URL outside git (1Password, etc.); do not commit secrets.
 
 3. Install and apply schema:
 
