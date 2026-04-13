@@ -1,4 +1,5 @@
 require("dotenv/config");
+const bcrypt = require("bcryptjs");
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 
@@ -6,6 +7,9 @@ const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
 });
 const prisma = new PrismaClient({ adapter });
+
+const devPassword = process.env.SEED_DEV_PASSWORD || "Password123!";
+const devPasswordHash = bcrypt.hashSync(devPassword, 12);
 
 async function main() {
   const doctorRole = await prisma.role.upsert({
@@ -34,11 +38,11 @@ async function main() {
 
   const doctor1 = await prisma.user.upsert({
     where: { email: "john@hospital.com" },
-    update: {},
+    update: { passwordHash: devPasswordHash },
     create: {
       username: "dr_john",
       email: "john@hospital.com",
-      passwordHash: "hashedpassword123",
+      passwordHash: devPasswordHash,
       roleId: doctorRole.id,
       mfaEnabled: true,
       status: "ACTIVE",
@@ -47,11 +51,11 @@ async function main() {
 
   const doctor2 = await prisma.user.upsert({
     where: { email: "karen@hospital.com" },
-    update: {},
+    update: { passwordHash: devPasswordHash },
     create: {
       username: "dr_karen",
       email: "karen@hospital.com",
-      passwordHash: "hashedpassword123",
+      passwordHash: devPasswordHash,
       roleId: doctorRole.id,
       mfaEnabled: true,
       status: "ACTIVE",
@@ -60,11 +64,11 @@ async function main() {
 
   const nurse1 = await prisma.user.upsert({
     where: { email: "mary@hospital.com" },
-    update: {},
+    update: { passwordHash: devPasswordHash },
     create: {
       username: "nurse_mary",
       email: "mary@hospital.com",
-      passwordHash: "hashedpassword123",
+      passwordHash: devPasswordHash,
       roleId: nurseRole.id,
       mfaEnabled: false,
       status: "ACTIVE",
@@ -73,11 +77,11 @@ async function main() {
 
   const nurse2 = await prisma.user.upsert({
     where: { email: "esha@hospital.com" },
-    update: {},
+    update: { passwordHash: devPasswordHash },
     create: {
       username: "nurse_esha",
       email: "esha@hospital.com",
-      passwordHash: "hashedpassword123",
+      passwordHash: devPasswordHash,
       roleId: nurseRole.id,
       mfaEnabled: false,
       status: "ACTIVE",
@@ -86,11 +90,11 @@ async function main() {
 
   const admin1 = await prisma.user.upsert({
     where: { email: "emma@hospital.com" },
-    update: {},
+    update: { passwordHash: devPasswordHash },
     create: {
       username: "admin_emma",
       email: "emma@hospital.com",
-      passwordHash: "hashedpassword123",
+      passwordHash: devPasswordHash,
       roleId: adminRole.id,
       mfaEnabled: true,
       status: "ACTIVE",
@@ -101,11 +105,11 @@ async function main() {
   for (let i = 1; i <= 5; i++) {
     const patientUser = await prisma.user.upsert({
       where: { email: `patient${i}@hospital.com` },
-      update: {},
+      update: { passwordHash: devPasswordHash },
       create: {
         username: `patient${i}`,
         email: `patient${i}@hospital.com`,
-        passwordHash: "hashedpassword123",
+        passwordHash: devPasswordHash,
         roleId: patientRole.id,
         mfaEnabled: false,
         status: "ACTIVE",
