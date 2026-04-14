@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const prisma = require('../db');
+const prisma = require('../config/prisma');
 
 const router = express.Router();
 
