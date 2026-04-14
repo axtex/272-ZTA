@@ -1,0 +1,90 @@
+@baseUrl = http://localhost:4000
+@email = john@hospital.com
+@password = Password123!
+
+# Run "Login (no MFA yet)" first; then @token / @refreshToken resolve from that response.
+@token = {{loginNoMfa.response.body.$.accessToken}}
+@refreshToken = {{loginNoMfa.response.body.$.refreshToken}}
+
+# --- 3. Login (no MFA yet) ---
+# Tests unauthenticated login when the user has MFA disabled.
+# Expected: 200 with mfaRequired: false, accessToken, refreshToken (no tempToken).
+### 3. Login (no MFA yet)
+# @name loginNoMfa
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "timezone": "America/Los_Angeles"
+}
+
+# --- 4. MFA setup ---
+# Tests POST /auth/mfa/setup with Authorization: Bearer {{token}}.
+# Expected: 200 with secret (base32) and qrCode (data URL).
+### 4. MFA setup
+POST {{baseUrl}}/auth/mfa/setup
+Authorization: Bearer {{token}}
+
+# --- 5. MFA verify (enable MFA) ---
+# Tests POST /auth/mfa/verify; completes enrollment and sets mfaEnabled true.
+# Expected: 200 with { "success": true }. Replace code with a real TOTP from your app (not 123456).
+### 5. MFA verify (enable MFA)
+POST {{baseUrl}}/auth/mfa/verify
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "code": "123456"
+}
+
+# --- 6. Login again — expect MFA challenge ---
+# Tests login after MFA is enabled.
+# Expected: 200 with mfaRequired: true and tempToken (no access/refresh tokens yet).
+### 6. Login again — expect MFA challenge
+# @name loginMfa
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}",
+  "timezone": "America/Los_Angeles"
+}
+
+# --- 7. Validate MFA code — exchange temp for real tokens ---
+# Tests POST /auth/mfa/validate with temp JWT + TOTP.
+# Expected: 200 with accessToken and refreshToken. Replace code with a real TOTP.
+### 7. Validate MFA code — expect real tokens
+# @name mfaValidate
+POST {{baseUrl}}/auth/mfa/validate
+Content-Type: application/json
+
+{
+  "tempToken": "{{loginMfa.response.body.$.tempToken}}",
+  "code": "123456"
+}
+
+# --- 8. Refresh token ---
+# Tests POST /auth/token/refresh; old refresh row is deleted, new pair issued.
+# Expected: 200 with new accessToken and refreshToken.
+### 8. Refresh token
+# @name tokenRefresh
+POST {{baseUrl}}/auth/token/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{mfaValidate.response.body.$.refreshToken}}"
+}
+
+# --- 9. Logout ---
+# Tests POST /auth/logout; refresh token row removed if present.
+# Expected: 200 with { "success": true } (always, including unknown token).
+### 9. Logout
+POST {{baseUrl}}/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{tokenRefresh.response.body.$.refreshToken}}"
+}
