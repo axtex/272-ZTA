@@ -6,6 +6,8 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
 
+  const registered = new URLSearchParams(window.location.search).get('registered')
+
   function handleSubmit(e) {
     e.preventDefault()
   }
@@ -20,6 +22,20 @@ export default function Login() {
         </header>
 
         <form className="login-form" onSubmit={handleSubmit} noValidate>
+
+          {registered && (
+            <div style={{
+              padding: '12px 14px',
+              borderRadius: '10px',
+              border: '1px solid #9fe1cb',
+              background: '#e1f5ee',
+              color: '#0f6e56',
+              fontSize: '14px',
+            }} role="status">
+              Account created successfully! Please sign in.
+            </div>
+          )}
+
           <div className="login-field">
             <label htmlFor="login-username">Username or email</label>
             <input
@@ -63,10 +79,11 @@ export default function Login() {
           <button type="submit" className="login-submit">
             Sign in
           </button>
+
         </form>
 
         <footer className="login-footer">
-          Need an account? <a href="#request-access">Request access</a>
+          Need an account? <a href="/register">Register as patient</a>
         </footer>
       </div>
     </div>
