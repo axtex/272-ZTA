@@ -1,6 +1,6 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const prisma = require('../../config/prisma');
@@ -39,7 +39,7 @@ async function issueTokens(userId, role) {
     { expiresIn: '15m' },
   );
 
-  const refreshToken = uuidv4();
+  const refreshToken = crypto.randomUUID();
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
