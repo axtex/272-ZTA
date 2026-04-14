@@ -1,7 +1,5 @@
 # Frontend design system (Hospital ZTA)
 
-This document is the **source of truth** for visual and UX conventions. All new UI should follow it so the app stays cohesive.
-
 ## Stack
 
 - **Tailwind CSS v4** with `@tailwindcss/vite`
