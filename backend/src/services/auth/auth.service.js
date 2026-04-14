@@ -1,6 +1,6 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const prisma = require('../../config/prisma');
@@ -39,7 +39,7 @@ async function issueTokens(userId, role) {
     { expiresIn: '15m' },
   );
 
-  const refreshToken = uuidv4();
+  const refreshToken = crypto.randomUUID();
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
@@ -52,6 +52,112 @@ async function issueTokens(userId, role) {
   });
 
   return { accessToken, refreshToken };
+}
+
+async function registerPatient(body, auditIp) {
+  const { username, email, password, roleName } = body;
+
+  if (!username || typeof username !== 'string' || username.trim().length < 3) {
+    const err = new Error('Username must be at least 3 characters');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    const err = new Error('Valid email is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!password || typeof password !== 'string' || password.length < 8) {
+    const err = new Error('Password must be at least 8 characters');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const requestedRole = (roleName || 'Patient').trim().toLowerCase();
+  if (requestedRole !== 'patient') {
+    const err = new Error(
+      'Only Patient accounts can self-register. Contact admin for staff access.',
+    );
+    err.statusCode = 403;
+    throw err;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedUsername = username.trim();
+
+  const existing = await prisma.user.findFirst({
+    where: {
+      OR: [{ email: normalizedEmail }, { username: normalizedUsername }],
+    },
+  });
+
+  if (existing) {
+    const err = new Error(
+      existing.email === normalizedEmail
+        ? 'Email is already registered'
+        : 'Username is already registered',
+    );
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const role = await prisma.role.findFirst({
+    where: {
+      roleName: {
+        equals: 'Patient',
+        mode: 'insensitive',
+      },
+    },
+  });
+
+  if (!role) {
+    const err = new Error('Role configuration error. Contact admin.');
+    err.statusCode = 500;
+    throw err;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const user = await prisma.user.create({
+    data: {
+      username: normalizedUsername,
+      email: normalizedEmail,
+      passwordHash,
+      roleId: role.id,
+      mfaEnabled: false,
+      status: 'ACTIVE',
+    },
+  });
+
+  const mrn = `MRN-${Date.now()}`;
+  await prisma.patient.create({
+    data: {
+      userId: user.id,
+      medicalRecordNumber: mrn,
+      assignedDoctorId: null,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: user.id,
+      action: 'REGISTER',
+      resourceId: user.id,
+      decision: 'ALLOW',
+      trustScore: 50,
+      ipAddress: auditIp || null,
+    },
+  });
+
+  return {
+    message: 'Account created successfully. Please log in.',
+    user: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: 'Patient',
+    },
+  };
 }
 
 async function loginUser(email, password, deviceInfo) {
@@ -208,6 +314,7 @@ async function logoutUser(refreshToken) {
 }
 
 module.exports = {
+  registerPatient,
   loginUser,
   issueTokens,
   setupMfa,
