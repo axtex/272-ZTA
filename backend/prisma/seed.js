@@ -1,12 +1,6 @@
 require("dotenv/config");
 const bcrypt = require("bcryptjs");
-const { PrismaClient } = require("@prisma/client");
-const { PrismaPg } = require("@prisma/adapter-pg");
-
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL,
-});
-const prisma = new PrismaClient({ adapter });
+const prisma = require("../src/config/prisma");
 
 const devPassword = process.env.SEED_DEV_PASSWORD || "Password123!";
 const devPasswordHash = bcrypt.hashSync(devPassword, 12);
@@ -136,26 +130,36 @@ async function main() {
   }
 
   await prisma.device.upsert({
-    where: { deviceFingerprint: "device-doctor1-001" },
-    update: {},
+    where: {
+      userId_userAgent: {
+        userId: doctor1.id,
+        userAgent: "seed-doctor1-browser",
+      },
+    },
+    update: { lastSeen: new Date() },
     create: {
       userId: doctor1.id,
-      deviceFingerprint: "device-doctor1-001",
-      isTrusted: true,
-      lastIpAddress: "192.168.1.10",
-      lastActive: new Date(),
+      userAgent: "seed-doctor1-browser",
+      ip: "192.168.1.10",
+      timezone: "America/Los_Angeles",
+      lastSeen: new Date(),
     },
   });
 
   await prisma.device.upsert({
-    where: { deviceFingerprint: "device-doctor2-001" },
-    update: {},
+    where: {
+      userId_userAgent: {
+        userId: doctor2.id,
+        userAgent: "seed-doctor2-browser",
+      },
+    },
+    update: { lastSeen: new Date() },
     create: {
       userId: doctor2.id,
-      deviceFingerprint: "device-doctor2-001",
-      isTrusted: true,
-      lastIpAddress: "192.168.1.11",
-      lastActive: new Date(),
+      userAgent: "seed-doctor2-browser",
+      ip: "192.168.1.11",
+      timezone: "America/Los_Angeles",
+      lastSeen: new Date(),
     },
   });
 
