@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AuthBadge, AuthShell } from '../components/AuthShell.jsx';
+import { Alert, Button, Spinner } from '../components/ui/index.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import {
+  authGhostLink,
+  authInputMono,
+  authLabel,
+} from '../design-system/patterns.js';
 
 export default function MfaSetupPage() {
   const navigate = useNavigate();
@@ -78,152 +85,125 @@ export default function MfaSetupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-12 dark:bg-slate-950">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-lg dark:border-slate-800 dark:bg-slate-900">
-        <header className="mb-8 text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            Set up two-factor authentication
-          </h1>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            Add an extra layer of security to your account
-          </p>
-        </header>
+    <AuthShell
+      badge={<AuthBadge>Account security</AuthBadge>}
+      title="Set up two-factor authentication"
+      subtitle="Add an extra layer of protection to your hospital account."
+    >
+      {isLoadingSetup && (
+        <div className="flex justify-center py-12">
+          <Spinner size="md" theme="slate" />
+        </div>
+      )}
 
-        {isLoadingSetup && (
-          <div className="flex justify-center py-12">
-            <span
-              className="inline-block size-10 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700 dark:border-slate-600 dark:border-t-slate-200"
-              aria-label="Loading"
+      {!isLoadingSetup && loadError && (
+        <div className="space-y-4">
+          <Alert variant="error" role="alert">
+            {loadError}
+          </Alert>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => navigate('/dashboard')}
+          >
+            Back to dashboard
+          </Button>
+        </div>
+      )}
+
+      {!isLoadingSetup && !loadError && step === 1 && (
+        <div className="flex flex-col gap-6">
+          <p className="text-center text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+            Scan this QR code with Google Authenticator or Authy.
+          </p>
+          <div className="flex justify-center rounded-xl border border-slate-200/90 bg-white/80 p-4 shadow-inner dark:border-slate-700 dark:bg-slate-950/50">
+            {qrCode ? (
+              <img
+                src={qrCode}
+                alt="QR code for authenticator app"
+                className="max-h-56 w-56 object-contain"
+              />
+            ) : null}
+          </div>
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Manual entry key
+            </p>
+            <p className="break-all rounded-[10px] border border-slate-200 bg-slate-50/90 px-3.5 py-3 font-mono text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
+              {secret}
+            </p>
+          </div>
+          <Button type="button" variant="primary" onClick={() => setStep(2)}>
+            I&apos;ve scanned it
+          </Button>
+        </div>
+      )}
+
+      {!isLoadingSetup && !loadError && step === 2 && (
+        <form
+          className="flex flex-col gap-5"
+          onSubmit={handleConfirm}
+          noValidate
+        >
+          <div>
+            <label htmlFor="mfa-setup-code" className={authLabel}>
+              Enter the code from your app to confirm
+            </label>
+            <input
+              ref={inputRef}
+              id="mfa-setup-code"
+              name="code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              pattern="[0-9]*"
+              className={authInputMono}
+              placeholder="000000"
+              value={code}
+              onChange={handleCodeChange}
+              aria-invalid={Boolean(submitError)}
             />
           </div>
-        )}
+          {submitError ? (
+            <Alert variant="error" role="alert">
+              {submitError}
+            </Alert>
+          ) : null}
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={code.length !== 6}
+            loading={isSubmitting}
+            spinner="light"
+          >
+            Enable 2FA
+          </Button>
+        </form>
+      )}
 
-        {!isLoadingSetup && loadError && (
-          <div className="space-y-4">
-            <div
-              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
-              role="alert"
-            >
-              {loadError}
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
-              Back to dashboard
-            </button>
-          </div>
-        )}
+      {!isLoadingSetup && !loadError && step === 3 && (
+        <div className="flex flex-col gap-6 text-center">
+          <Alert variant="success" role="status">
+            Two-factor authentication is now enabled
+          </Alert>
+          <Button type="button" variant="primary" onClick={() => navigate('/dashboard')}>
+            Back to dashboard
+          </Button>
+        </div>
+      )}
 
-        {!isLoadingSetup && !loadError && step === 1 && (
-          <div className="space-y-6">
-            <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-              Scan this QR code with Google Authenticator or Authy
-            </p>
-            <div className="flex justify-center rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700">
-              {qrCode ? (
-                <img
-                  src={qrCode}
-                  alt="QR code for authenticator app"
-                  className="max-h-56 w-56 object-contain"
-                />
-              ) : null}
-            </div>
-            <div>
-              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Manual entry key
-              </p>
-              <p className="break-all rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100">
-                {secret}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-            >
-              I&apos;ve scanned it
-            </button>
-          </div>
-        )}
-
-        {!isLoadingSetup && !loadError && step === 2 && (
-          <form className="space-y-5" onSubmit={handleConfirm} noValidate>
-            <div>
-              <label
-                htmlFor="mfa-setup-code"
-                className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
-              >
-                Enter the code from your app to confirm
-              </label>
-              <input
-                ref={inputRef}
-                id="mfa-setup-code"
-                name="code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                pattern="[0-9]*"
-                className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-center font-mono text-lg tracking-[0.35em] text-slate-900 shadow-sm outline-none ring-slate-400 placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-400/30 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-                placeholder="000000"
-                value={code}
-                onChange={handleCodeChange}
-                aria-invalid={Boolean(submitError)}
-              />
-            </div>
-            {submitError ? (
-              <div
-                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
-                role="alert"
-              >
-                {submitError}
-              </div>
-            ) : null}
-            <button
-              type="submit"
-              disabled={isSubmitting || code.length !== 6}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-            >
-              {isSubmitting ? (
-                <span
-                  className="inline-block size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-                  aria-hidden
-                />
-              ) : null}
-              <span>Enable 2FA</span>
-            </button>
-          </form>
-        )}
-
-        {!isLoadingSetup && !loadError && step === 3 && (
-          <div className="space-y-6 text-center">
-            <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-              Two-factor authentication is now enabled
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
-            >
-              Back to dashboard
-            </button>
-          </div>
-        )}
-
-        {!isLoadingSetup && step !== 3 && !loadError && (
-          <p className="mt-8 text-center text-sm">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              className="font-medium text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline dark:text-slate-400 dark:hover:text-white"
-            >
-              Cancel
-            </button>
-          </p>
-        )}
-      </div>
-    </div>
+      {!isLoadingSetup && step !== 3 && !loadError && (
+        <p className="mt-8 text-center">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className={authGhostLink}
+          >
+            Cancel
+          </button>
+        </p>
+      )}
+    </AuthShell>
   );
 }
