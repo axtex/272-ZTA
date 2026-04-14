@@ -1,11 +1,12 @@
 require('dotenv/config');
 const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
+const cors    = require('cors');
+const helmet  = require('helmet');
+const morgan  = require('morgan');
 
 const authRoutes = require('./routes/auth');
 const authRouter = require('./services/auth/auth.routes');
+const ehrRoutes  = require('./routes/ehr');
 
 const app = express();
 
@@ -14,10 +15,14 @@ app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
+app.get('/health', (req, res) => res.json({ 
+  status: 'ok', 
+  service: 'api-gateway' 
+}));
 
-app.use('/auth', authRouter);
+app.use('/auth',     authRouter);
 app.use('/api/auth', authRoutes);
+app.use('/api',      ehrRoutes);
 
 if (process.env.NODE_ENV === 'test') {
   const { verifyToken } = require('./services/auth/auth.middleware');
