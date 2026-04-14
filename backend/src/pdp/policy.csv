@@ -1,0 +1,21 @@
+# Doctor permissions
+p, Doctor, ehr, read
+p, Doctor, ehr, write
+p, Doctor, vitals, read
+p, Doctor, vitals, write
+p, Doctor, files, upload
+
+# Nurse permissions
+p, Nurse, ehr, read
+p, Nurse, vitals, read
+p, Nurse, vitals, write
+
+# Admin permissions
+p, Admin, users, read
+p, Admin, users, write
+p, Admin, audit, read
+p, Admin, roles, read
+p, Admin, roles, write
+
+# Patient permissions
+p, Patient, ehr, read
