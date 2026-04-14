@@ -1,4 +1,5 @@
 const {
+  registerPatient,
   loginUser,
   setupMfa,
   verifyMfaSetup,
@@ -25,6 +26,18 @@ function handleAuthError(res, error) {
     return res.status(401).json({ error: 'Invalid token' });
   }
   return res.status(500).json({ error: msg });
+}
+
+async function register(req, res) {
+  try {
+    const result = await registerPatient(req.body, req.ip ?? null);
+    return res.status(201).json(result);
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    return handleAuthError(res, error);
+  }
 }
 
 async function login(req, res) {
@@ -91,6 +104,7 @@ async function logout(req, res) {
 }
 
 module.exports = {
+  register,
   login,
   mfaSetup,
   mfaVerify,

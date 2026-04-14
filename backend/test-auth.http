@@ -2,6 +2,18 @@
 @email = john@hospital.com
 @password = Password123!
 
+# --- 1. Register (patient self-signup; bcrypt 12) ---
+# Expected: 201 with message + user (no password hash). Duplicate email/username → 409.
+### 1. Register
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "username": "newpatient",
+  "email": "newpatient@example.com",
+  "password": "Password123!"
+}
+
 # Run "Login (no MFA yet)" first; then @token / @refreshToken resolve from that response.
 @token = {{loginNoMfa.response.body.$.accessToken}}
 @refreshToken = {{loginNoMfa.response.body.$.refreshToken}}
