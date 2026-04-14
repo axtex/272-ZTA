@@ -1,13 +1,22 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { Badge, Button } from '../components/ui/index.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import {
+  appHeaderBar,
+  appOutlineLink,
+  appPageBg,
+  appPanelCard,
+} from '../design-system/patterns.js';
 
 function InfoCard({ title, children }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      <h2 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">
+    <div className={appPanelCard}>
+      <h2 className="mb-2 text-lg font-semibold tracking-tight text-ds-text dark:text-white">
         {title}
       </h2>
-      <p className="text-sm text-slate-600 dark:text-slate-400">{children}</p>
+      <p className="text-sm leading-relaxed text-ds-text-muted dark:text-slate-400">
+        {children}
+      </p>
     </div>
   );
 }
@@ -27,33 +36,24 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950">
-      <header className="border-b border-slate-200 bg-white px-4 py-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:px-6 lg:px-8">
+    <div className={appPageBg}>
+      <header className={appHeaderBar}>
         <div className="mx-auto flex max-w-6xl flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-semibold text-slate-900 dark:text-white sm:text-2xl">
+            <h1 className="truncate text-xl font-semibold text-ds-text dark:text-white sm:text-2xl">
               Welcome, {user?.email}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center rounded-full bg-slate-200 px-3 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-700 dark:text-slate-100">
-                {user?.role ?? 'Unknown'}
-              </span>
+              <Badge variant="soft">{user?.role ?? 'Unknown'}</Badge>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <Link
-              to="/mfa-setup"
-              className="rounded-lg border border-slate-300 bg-transparent px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
+            <Link to="/mfa-setup" className={appOutlineLink}>
               Set up 2FA
             </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-            >
+            <Button type="button" variant="secondary" onClick={handleLogout}>
               Logout
-            </button>
+            </Button>
           </div>
         </div>
       </header>
@@ -70,7 +70,7 @@ export default function DashboardPage() {
             </div>
             <button
               type="button"
-              className="w-full rounded-lg border-2 border-red-600 bg-transparent px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/40 md:max-w-md"
+              className="w-full rounded-ds-input border-2 border-red-600 bg-transparent px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/40 md:max-w-md"
             >
               Break-glass Emergency Access
             </button>
@@ -100,7 +100,7 @@ export default function DashboardPage() {
         )}
 
         {!['doctor', 'nurse', 'admin', 'patient'].includes(roleKey) && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+          <div className="rounded-ds-card border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             No role-specific dashboard for role &quot;{user?.role}&quot;. Contact an administrator.
           </div>
         )}

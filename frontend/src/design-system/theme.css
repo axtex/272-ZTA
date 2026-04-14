@@ -1,0 +1,53 @@
+/**
+ * Hospital ZTA — global design tokens (Tailwind v4 @theme).
+ * Utilities: bg-ds-primary, text-ds-text-muted, rounded-ds-input, shadow-ds-card, etc.
+ */
+
+@theme {
+  /* Typography */
+  --font-sans: system-ui, ui-sans-serif, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+
+  /* Radii */
+  --radius-ds-input: 0.625rem;
+  --radius-ds-card: 1rem;
+  --radius-ds-pill: 9999px;
+
+  /* Elevation */
+  --shadow-ds-card: 0 10px 40px -12px rgb(15 23 42 / 0.12);
+  --shadow-ds-card-hover: 0 14px 48px -12px rgb(15 23 42 / 0.16);
+  --shadow-ds-glow: 0 8px 24px rgb(124 58 237 / 0.28);
+
+  /* Brand */
+  --color-ds-primary: #7c3aed;
+  --color-ds-primary-hover: #6d28d9;
+  --color-ds-primary-soft: #8b5cf6;
+  --color-ds-fuchsia: #c026d3;
+  --color-ds-fuchsia-soft: #d946ef;
+
+  /* Page canvas (gradients) */
+  --color-ds-canvas-from: #faf5ff;
+  --color-ds-canvas-via: #ffffff;
+  --color-ds-canvas-to: #f1f5f9;
+
+  /* Surfaces & borders */
+  --color-ds-surface: #ffffff;
+  --color-ds-surface-muted: #f8fafc;
+  --color-ds-surface-glass: rgb(255 255 255 / 0.9);
+  --color-ds-border: rgb(226 232 240 / 0.95);
+  --color-ds-border-strong: rgb(203 213 225 / 1);
+
+  /* Text */
+  --color-ds-text: #0f172a;
+  --color-ds-text-secondary: #334155;
+  --color-ds-text-muted: #64748b;
+
+  /* Semantic */
+  --color-ds-danger-border: rgb(254 202 202 / 0.95);
+  --color-ds-danger-bg: rgb(254 242 242 / 0.95);
+  --color-ds-danger-text: #991b1b;
+
+  --color-ds-success-border: rgb(167 243 208 / 0.95);
+  --color-ds-success-bg: rgb(236 253 245 / 0.95);
+  --color-ds-success-text: #065f46;
+}

@@ -4,12 +4,14 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import MfaSetupPage from './pages/MfaSetupPage.jsx';
 import MfaVerifyPage from './pages/MfaVerifyPage.jsx';
+import Register from './pages/Register.jsx';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<Register />} />
         <Route path="/mfa-verify" element={<MfaVerifyPage />} />
         <Route
           path="/mfa-setup"
