@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest --runInBand",
+    "test:watch": "jest --runInBand --watch",
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "db:generate": "prisma generate",
@@ -11,6 +12,12 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "node prisma/seed.js"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ]
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -30,10 +37,15 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "qrcode": "^1.5.4",
+    "speakeasy": "^2.0.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "jest": "^30.3.0",
     "nodemon": "^3.1.14",
-    "prisma": "^7.6.0"
+    "prisma": "^7.6.0",
+    "supertest": "^7.2.2"
   }
 }

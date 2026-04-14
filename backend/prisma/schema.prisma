@@ -33,6 +33,7 @@ model User {
   role             Role         @relation(fields: [roleId], references: [id])
   patientProfile   Patient?     @relation("PatientUser")
   devices          Device[]
+  refreshTokens    RefreshToken[]
   ehrAsDoctor      EHR[]        @relation("DoctorEHR")
   assignedPatients Patient[]    @relation("AssignedDoctor")
   auditLogs        AuditLog[]
@@ -90,16 +91,28 @@ model Patient {
 }
 
 model Device {
-  id                String      @id @default(uuid()) @db.Uuid
-  userId            String      @map("user_id") @db.Uuid
-  deviceFingerprint String      @unique @map("device_fingerprint") @db.VarChar(255)
-  isTrusted         Boolean     @default(false) @map("is_trusted")
-  lastIpAddress     String?     @map("last_ip_address") @db.VarChar(100)
-  lastActive        DateTime?   @map("last_active")
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  userAgent String   @map("user_agent") @db.VarChar(1024)
+  ip        String?  @map("ip") @db.VarChar(100)
+  timezone  String?  @map("timezone") @db.VarChar(100)
+  lastSeen  DateTime @default(now()) @map("last_seen")
 
-  user              User        @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, userAgent])
   @@map("devices")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique @db.VarChar(512)
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
 }
 
 model EHR {
