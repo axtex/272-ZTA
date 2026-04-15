@@ -5,7 +5,10 @@ const { evaluate } = require('../pdp/pdp.service');
 function pdp(resource, action, getResourceId = (req) => req.params.id) {
   return async (req, res, next) => {
     const userId     = req.user?.sub;
-    const role       = req.user?.roleName;
+    const rawRole = req.user?.role;
+    const role = rawRole
+      ? rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase()
+      : undefined;
     const ipAddress  = req.ip || req.headers['x-forwarded-for'];
     const userAgent  = req.headers['user-agent'] ?? null;
     const resourceId = getResourceId(req);
