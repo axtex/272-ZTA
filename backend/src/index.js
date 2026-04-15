@@ -7,6 +7,9 @@ const morgan  = require('morgan');
 const authRoutes = require('./routes/auth');
 const authRouter = require('./services/auth/auth.routes');
 const ehrRoutes  = require('./routes/ehr');
+const ehrV2Routes = require('./services/ehr/ehr.routes');
+const userRoutes = require('./services/user/user.routes');
+const auditRoutes = require('./services/audit/audit.routes');
 
 const app = express();
 
@@ -23,6 +26,9 @@ app.get('/health', (req, res) => res.json({
 app.use('/auth',     authRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api',      ehrRoutes);
+app.use('/api/v2',   ehrV2Routes);
+app.use('/users',    userRoutes);
+app.use('/audit',    auditRoutes);
 
 if (process.env.NODE_ENV === 'test') {
   const { verifyToken } = require('./services/auth/auth.middleware');

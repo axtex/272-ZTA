@@ -1,6 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Badge, Button } from '../components/ui/index.js';
 import { useAuth } from '../context/AuthContext.jsx';
+import DoctorDashboard from '../components/dashboard/DoctorDashboard.jsx';
+import NurseDashboard from '../components/dashboard/NurseDashboard.jsx';
+import AdminDashboard from '../components/dashboard/AdminDashboard.jsx';
+import PatientDashboard from '../components/dashboard/PatientDashboard.jsx';
 import {
   appHeaderBar,
   appOutlineLink,
@@ -59,45 +63,13 @@ export default function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        {roleKey === 'doctor' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <InfoCard title="My Patients">
-                Patient list coming soon
-              </InfoCard>
-              <InfoCard title="EHR Access">Placeholder</InfoCard>
-              <InfoCard title="Upload Medical Files">Placeholder</InfoCard>
-            </div>
-            <button
-              type="button"
-              className="w-full rounded-ds-input border-2 border-red-600 bg-transparent px-4 py-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-500 dark:text-red-400 dark:hover:bg-red-950/40 md:max-w-md"
-            >
-              Break-glass Emergency Access
-            </button>
-          </div>
-        )}
+        {roleKey === 'doctor' && <DoctorDashboard />}
 
-        {roleKey === 'nurse' && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <InfoCard title="My Ward">Placeholder</InfoCard>
-            <InfoCard title="Patient Vitals">Placeholder</InfoCard>
-          </div>
-        )}
+        {roleKey === 'nurse' && <NurseDashboard />}
 
-        {roleKey === 'admin' && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <InfoCard title="User Management">Placeholder</InfoCard>
-            <InfoCard title="Audit Logs">Placeholder</InfoCard>
-            <InfoCard title="Security Alerts">Placeholder</InfoCard>
-          </div>
-        )}
+        {roleKey === 'admin' && <AdminDashboard />}
 
-        {roleKey === 'patient' && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <InfoCard title="My Health Records">Placeholder</InfoCard>
-            <InfoCard title="My Documents">Placeholder</InfoCard>
-          </div>
-        )}
+        {roleKey === 'patient' && <PatientDashboard />}
 
         {!['doctor', 'nurse', 'admin', 'patient'].includes(roleKey) && (
           <div className="rounded-ds-card border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
