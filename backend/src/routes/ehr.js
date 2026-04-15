@@ -13,11 +13,11 @@ router.get('/patients/:patientId/ehr',
   async (req, res, next) => {
     try {
       const { patientId } = req.params;
-      const role           = req.user.roleName;
+      const role           = req.user.role;
       const userId         = req.user.sub;
 
       // Patient can only see their own records
-      if (role === 'Patient') {
+      if (role === 'patient') {
         const patient = await prisma.patient.findUnique({
           where: { userId },
         });
@@ -34,8 +34,8 @@ router.get('/patients/:patientId/ehr',
           updatedAt: true,
           vitals:    true,
           // Nurses cannot see diagnosis
-          diagnosis: role !== 'Nurse',
-          s3FileKey: role !== 'Nurse' && role !== 'Patient',
+          diagnosis: role !== 'nurse',
+          s3FileKey: role !== 'nurse' && role !== 'patient',
           doctorId:  true,
         },
       });
@@ -58,7 +58,7 @@ router.get('/ehr/:id',
   pdp('ehr', 'read', (req) => req.params.id),
   async (req, res, next) => {
     try {
-      const role   = req.user.roleName;
+      const role   = req.user.role;
       const record = await prisma.eHR.findUnique({
         where: { id: req.params.id },
       });
@@ -68,7 +68,7 @@ router.get('/ehr/:id',
       }
 
       // Field-level filtering per role
-      if (role === 'Nurse') {
+      if (role === 'nurse') {
         const { diagnosis, s3FileKey, ...allowed } = record;
         return res.json({ record: allowed, trustScore: req.pdpResult?.trustScore });
       }
@@ -119,11 +119,11 @@ router.patch('/ehr/:id',
   pdp('ehr', 'write', (req) => req.params.id),
   async (req, res, next) => {
     try {
-      const role = req.user.roleName;
+      const role = req.user.role;
       const { diagnosis, vitals, s3FileKey } = req.body;
 
       // Nurses can only update vitals
-      if (role === 'Nurse') {
+      if (role === 'nurse') {
         if (diagnosis || s3FileKey) {
           return res.status(403).json({
             error: 'Nurses can only update vitals',

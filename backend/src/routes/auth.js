@@ -27,7 +27,7 @@ function signToken(user) {
       sub: user.id,
       email: user.email,
       roleId: user.roleId,
-      roleName: user.role.roleName,
+      role: user.role.roleName.toLowerCase(),
     },
     secret,
     { expiresIn }
