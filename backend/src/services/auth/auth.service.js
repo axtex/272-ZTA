@@ -160,6 +160,71 @@ async function registerPatient(body, auditIp) {
   };
 }
 
+async function registerUser(email, password, roleName) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    const err = new Error('Valid email is required');
+    err.statusCode = 400;
+    throw err;
+  }
+  if (!password || typeof password !== 'string' || password.length < 8) {
+    const err = new Error('Password must be at least 8 characters');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const requestedRole = (roleName || 'Patient').trim();
+
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  if (existing) {
+    const err = new Error('Email is already registered');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  const role = await prisma.role.findFirst({
+    where: { roleName: { equals: requestedRole, mode: 'insensitive' } },
+  });
+  if (!role) {
+    const err = new Error('Invalid role');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const baseUsername = normalizedEmail.split('@')[0].replace(/[^a-z0-9_\\-\\.]/gi, '').slice(0, 35) || 'user';
+  const username = `${baseUsername}_${Date.now()}`.slice(0, 50);
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  const user = await prisma.user.create({
+    data: {
+      username,
+      email: normalizedEmail,
+      passwordHash,
+      roleId: role.id,
+      mfaEnabled: false,
+      status: 'ACTIVE',
+    },
+  });
+
+  if (role.roleName.toLowerCase() === 'patient') {
+    const mrn = `MRN-${Date.now()}`;
+    await prisma.patient.create({
+      data: {
+        userId: user.id,
+        medicalRecordNumber: mrn,
+        assignedDoctorId: null,
+      },
+    });
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    role: role.roleName,
+  };
+}
+
 async function loginUser(email, password, deviceInfo) {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -315,6 +380,7 @@ async function logoutUser(refreshToken) {
 
 module.exports = {
   registerPatient,
+  registerUser,
   loginUser,
   issueTokens,
   setupMfa,

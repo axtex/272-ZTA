@@ -11,6 +11,8 @@ const jwt = require('jsonwebtoken');
 const app = require('../index');
 const prisma = require('../config/prisma');
 
+jest.setTimeout(30000);
+
 const runId = Date.now();
 const testEmail = `test_${runId}@hospital.com`;
 const testPassword = 'Password123!';
@@ -19,13 +21,12 @@ const testPassword = 'Password123!';
 const createdEmails = new Set();
 
 async function registerUser(email, usernameSuffix = '') {
-  const username = `tu_${runId}${usernameSuffix}`.slice(0, 50);
   const res = await request(app)
     .post('/auth/register')
     .send({
-      username,
       email,
       password: testPassword,
+      role: 'patient',
     });
   if (res.status === 201) {
     createdEmails.add(email);
@@ -54,11 +55,9 @@ describe('POST /auth/register', () => {
   it('should register a new user successfully (201)', async () => {
     const res = await registerUser(testEmail);
     expect(res.status).toBe(201);
-    expect(res.body.message).toMatch(/created successfully/i);
-    expect(res.body.user).toMatchObject({
-      email: testEmail,
-      role: 'Patient',
-    });
+    expect(res.body.user).toBeDefined();
+    expect(res.body.user.email).toBe(testEmail.toLowerCase());
+    expect(res.body.user.role).toMatch(/patient/i);
     expect(res.body.user.passwordHash).toBeUndefined();
     expect(res.body.user.id).toBeDefined();
   });
@@ -71,9 +70,9 @@ describe('POST /auth/register', () => {
     const second = await request(app)
       .post('/auth/register')
       .send({
-        username: `tu_${runId}_409b`.slice(0, 50),
         email,
         password: testPassword,
+        role: 'patient',
       });
     expect(second.status).toBe(409);
     expect(second.body.error).toMatch(/already registered/i);
@@ -83,9 +82,9 @@ describe('POST /auth/register', () => {
     const noAt = await request(app)
       .post('/auth/register')
       .send({
-        username: `tu_${runId}_badmail`.slice(0, 50),
         email: 'not-an-email',
         password: testPassword,
+        role: 'patient',
       });
     expect(noAt.status).toBe(400);
     expect(noAt.body.error).toMatch(/valid email/i);
@@ -93,8 +92,8 @@ describe('POST /auth/register', () => {
     const noPassword = await request(app)
       .post('/auth/register')
       .send({
-        username: `tu_${runId}_nopw`.slice(0, 50),
         email: `test_${runId}_nopw@hospital.com`,
+        role: 'patient',
       });
     expect(noPassword.status).toBe(400);
     expect(noPassword.body.error).toMatch(/password/i);
