@@ -1,5 +1,6 @@
 const {
   registerPatient,
+  registerUser,
   loginUser,
   setupMfa,
   verifyMfaSetup,
@@ -30,8 +31,9 @@ function handleAuthError(res, error) {
 
 async function register(req, res) {
   try {
-    const result = await registerPatient(req.body, req.ip ?? null);
-    return res.status(201).json(result);
+    const { email, password, role } = req.body || {};
+    const user = await registerUser(email, password, role);
+    return res.status(201).json({ user });
   } catch (error) {
     if (error.statusCode) {
       return res.status(error.statusCode).json({ error: error.message });

@@ -10,6 +10,8 @@ const request = require('supertest');
 const app = require('../index');
 const prisma = require('../config/prisma');
 
+jest.setTimeout(30000);
+
 const ts = Date.now();
 const UA = 'test-agent';
 
@@ -152,25 +154,26 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (!doctor?.id) {
+  const userIds = [
+    doctor?.id,
+    nurse?.id,
+    adminUser?.id,
+    patientUser?.id,
+    stepUpUser?.id,
+    otherPatientOwner?.id,
+  ].filter(Boolean);
+
+  if (userIds.length === 0) {
     await prisma.$disconnect();
     return;
   }
-  const userIds = [
-    doctor.id,
-    nurse.id,
-    adminUser.id,
-    patientUser.id,
-    stepUpUser.id,
-    otherPatientOwner.id,
-  ];
 
   await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.device.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.eHR.deleteMany({
     where: {
       patientId: {
-        in: [patientProfile.id, otherPatientProfile.id].filter(Boolean),
+        in: [patientProfile?.id, otherPatientProfile?.id].filter(Boolean),
       },
     },
   });
