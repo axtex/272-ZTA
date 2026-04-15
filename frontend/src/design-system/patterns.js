@@ -59,3 +59,33 @@ export const appPanelCard =
 /** Small violet-outline control (e.g. “Set up 2FA” in header). */
 export const appOutlineLink =
   'inline-flex items-center rounded-lg border border-violet-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-ds-primary shadow-sm transition hover:bg-violet-50 dark:border-violet-900/50 dark:bg-slate-800/80 dark:text-ds-primary-soft dark:hover:bg-violet-950/40';
+
+/** Section heading inside a dashboard panel. */
+export const appSectionHeading =
+  'text-base font-semibold tracking-tight text-ds-text dark:text-white';
+
+/** Muted helper text inside panels. */
+export const appMutedText =
+  'text-sm leading-relaxed text-ds-text-muted dark:text-slate-400';
+
+/** Data row — label + value pair inside a panel. */
+export const appDataRow =
+  'flex items-center justify-between py-2.5 border-b border-ds-border/60 last:border-0 dark:border-slate-700/60';
+
+/** Label side of a data row. */
+export const appDataLabel =
+  'text-sm text-ds-text-muted dark:text-slate-400';
+
+/** Value side of a data row. */
+export const appDataValue =
+  'text-sm font-medium text-ds-text dark:text-slate-200';
+
+/** Status badge colors for audit log decisions. */
+export const appDecisionAllow =
+  'inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300';
+
+export const appDecisionDeny =
+  'inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-950/50 dark:text-red-300';
+
+export const appDecisionStepUp =
+  'inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300';
