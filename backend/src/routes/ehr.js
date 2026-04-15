@@ -67,6 +67,15 @@ router.get('/ehr/:id',
         return res.status(404).json({ error: 'EHR record not found' });
       }
 
+      if (role === 'patient') {
+        const patient = await prisma.patient.findUnique({
+          where: { userId: req.user.sub },
+        });
+        if (!patient || record.patientId !== patient.id) {
+          return res.status(403).json({ error: 'Access denied' });
+        }
+      }
+
       // Field-level filtering per role
       if (role === 'nurse') {
         const { diagnosis, s3FileKey, ...allowed } = record;

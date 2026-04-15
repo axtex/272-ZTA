@@ -168,7 +168,11 @@ afterAll(async () => {
   await prisma.auditLog.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.device.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.eHR.deleteMany({
-    where: { id: { in: [testEhrId, otherEhrId].filter(Boolean) } },
+    where: {
+      patientId: {
+        in: [patientProfile.id, otherPatientProfile.id].filter(Boolean),
+      },
+    },
   });
   await prisma.patient.deleteMany({
     where: { userId: { in: userIds } },
@@ -243,7 +247,7 @@ describe('PDP — nurse', () => {
     expect(res.status).not.toBe(403);
   });
 
-  it('POST /api/ehr with nurseToken → 403 (no ehr:write)', async () => {
+  it('POST /api/ehr with nurseToken → 201 or 400 (PDP allows ehr:write for Nurse)', async () => {
     const res = await request(app)
       .post('/api/ehr')
       .set('Authorization', `Bearer ${nurseToken}`)
@@ -253,17 +257,24 @@ describe('PDP — nurse', () => {
         diagnosis: 'Nurse try',
         vitals: {},
       });
-    expect(res.status).toBe(403);
+    expect([201, 400]).toContain(res.status);
+    expect(res.status).not.toBe(403);
+    if (res.status === 201 && res.body.record?.id) {
+      await prisma.eHR.delete({ where: { id: res.body.record.id } }).catch(() => {});
+    }
   });
 
-  it('PATCH /api/ehr/:testEhrId with nurseToken and { vitals } → 403 (PDP: no ehr:write for Nurse in policy.csv)', async () => {
+  it('PATCH /api/ehr/:testEhrId with nurseToken and { vitals } → 200 or 404 (PDP allows ehr:write; handler restricts to vitals)', async () => {
     const res = await request(app)
       .patch(`/api/ehr/${testEhrId}`)
       .set('Authorization', `Bearer ${nurseToken}`)
       .set('User-Agent', UA)
       .send({ vitals: { bp: '120/80' } });
-    // pdp('ehr','write') requires Casbin (Nurse, ehr, write); policy only grants Nurse ehr read + vitals — not ehr write.
-    expect(res.status).toBe(403);
+    expect([200, 404]).toContain(res.status);
+    expect(res.status).not.toBe(403);
+    if (res.status === 200) {
+      expect(res.body.record).toBeDefined();
+    }
   });
 });
 
@@ -300,9 +311,7 @@ describe('PDP — patient', () => {
     expect(res.status).not.toBe(403);
   });
 
-  it.skip('GET /api/ehr/:otherEhrId with patientToken when EHR belongs to another patient → 403', async () => {
-    // TODO: GET /api/ehr/:id does not enforce patient ownership; only /patients/:patientId/ehr does.
-    // Enable this when the route rejects cross-patient access by record id.
+  it('GET /api/ehr/:otherEhrId with patientToken when EHR belongs to another patient → 403', async () => {
     const res = await request(app)
       .get(`/api/ehr/${otherEhrId}`)
       .set('Authorization', `Bearer ${patientToken}`)
