@@ -7,6 +7,7 @@ p, Doctor, files, upload
 
 # Nurse permissions
 p, Nurse, ehr, read
+p, Nurse, ehr, write
 p, Nurse, vitals, read
 p, Nurse, vitals, write
 
