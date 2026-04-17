@@ -15,6 +15,7 @@ router.delete('/:id', controller.deleteUser);
 
 // TODO: add nurse ward assignment model to schema
 router.post('/:id/assign', controller.assignDoctor);
+router.post('/:id/unlock', controller.unlockUser);
 
 module.exports = router;
 

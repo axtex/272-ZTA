@@ -290,6 +290,13 @@ async function loginUser(email, password, deviceInfo) {
     return { mfaRequired: true, tempToken };
   }
 
+  await prisma.auditLog.deleteMany({
+    where: {
+      userId: user.id,
+      action: 'LOGIN_FAILED',
+    },
+  });
+
   const tokens = await issueTokens(user.id, user.role);
   return { mfaRequired: false, ...tokens };
 }
