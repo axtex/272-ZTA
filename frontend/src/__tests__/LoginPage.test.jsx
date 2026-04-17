@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginPage from '../pages/LoginPage.jsx';
+import { renderWithProviders } from '../test/utils.jsx';
 
 const { mockLoginFn } = vi.hoisted(() => ({
   mockLoginFn: vi.fn(),
@@ -23,7 +24,7 @@ function renderLogin(initialEntry = '/login') {
     ],
     { initialEntries: [initialEntry] },
   );
-  render(<RouterProvider router={router} />);
+  renderWithProviders(<RouterProvider router={router} />);
   return router;
 }
 

@@ -163,6 +163,16 @@ export async function assignDoctor(userId, patientId) {
   return response.data;
 }
 
+/**
+ * POST /users/:userId/unlock
+ * @param {string} userId
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function unlockUser(userId) {
+  const response = await api.post(`/users/${userId}/unlock`);
+  return response.data;
+}
+
 // -------------------------
 // Audit API
 // -------------------------

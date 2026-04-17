@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const prisma = require('../../config/prisma');
+const { recordFailedLogin } = require('../anomaly/anomaly.service');
 
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
@@ -225,27 +226,46 @@ async function registerUser(email, password, roleName) {
   };
 }
 
+// ── Login with failed attempt tracking + auto-lock ────────────
 async function loginUser(email, password, deviceInfo) {
   const user = await prisma.user.findUnique({
     where: { email },
     include: { role: true },
   });
+
   if (!user) {
     throw new Error('Invalid credentials');
   }
 
+  // Block suspended accounts
+  if (user.status === 'SUSPENDED') {
+    throw Object.assign(
+      new Error('Account is locked due to too many failed login attempts. Contact admin.'),
+      { statusCode: 403 },
+    );
+  }
+
+  // Block disabled accounts
+  if (user.status === 'DISABLED') {
+    throw Object.assign(
+      new Error('Account is disabled. Contact admin.'),
+      { statusCode: 403 },
+    );
+  }
+
   const passwordOk = await bcrypt.compare(password, user.passwordHash);
+
   if (!passwordOk) {
+    // Record failed login — auto-locks after 5 attempts
+    await recordFailedLogin(user.id, deviceInfo?.ip ?? null);
     throw new Error('Invalid credentials');
   }
 
+  // Successful login — upsert device
   const userAgent = deviceInfo?.userAgent ?? 'unknown';
   await prisma.device.upsert({
     where: {
-      userId_userAgent: {
-        userId: user.id,
-        userAgent,
-      },
+      userId_userAgent: { userId: user.id, userAgent },
     },
     update: {
       ip: deviceInfo?.ip ?? null,
@@ -269,6 +289,13 @@ async function loginUser(email, password, deviceInfo) {
     );
     return { mfaRequired: true, tempToken };
   }
+
+  await prisma.auditLog.deleteMany({
+    where: {
+      userId: user.id,
+      action: 'LOGIN_FAILED',
+    },
+  });
 
   const tokens = await issueTokens(user.id, user.role);
   return { mfaRequired: false, ...tokens };
