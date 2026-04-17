@@ -273,3 +273,134 @@ describe('verifyToken middleware', () => {
     expect(res.body.user.userId).toBeDefined();
   });
 });
+
+describe('POST /auth/token/refresh — edge cases', () => {
+  const email = `test_${runId}_refresh_edge@hospital.com`;
+
+  beforeAll(async () => {
+    await registerUser(email, '_refresh_edge');
+  });
+
+  it('refresh token can only be used once (rotation)', async () => {
+    const login = await request(app).post('/auth/login').send({
+      email,
+      password: testPassword,
+    });
+    expect(login.status).toBe(200);
+    const { refreshToken } = login.body;
+    expect(refreshToken).toBeDefined();
+
+    const first = await request(app)
+      .post('/auth/token/refresh')
+      .send({ refreshToken });
+    expect(first.status).toBe(200);
+
+    const second = await request(app)
+      .post('/auth/token/refresh')
+      .send({ refreshToken });
+    expect(second.status).toBe(401);
+  });
+
+  it('expired refresh token is rejected', async () => {
+    const user = await prisma.user.findUnique({ where: { email } });
+    expect(user).toBeTruthy();
+
+    const token = crypto.randomUUID();
+    await prisma.refreshToken.create({
+      data: {
+        token,
+        userId: user.id,
+        expiresAt: new Date(Date.now() - 1000),
+      },
+    });
+
+    const res = await request(app)
+      .post('/auth/token/refresh')
+      .send({ refreshToken: token });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /auth/logout — edge cases', () => {
+  const email = `test_${runId}_logout_edge@hospital.com`;
+
+  beforeAll(async () => {
+    await registerUser(email, '_logout_edge');
+  });
+
+  it('logout is idempotent', async () => {
+    const login = await request(app).post('/auth/login').send({
+      email,
+      password: testPassword,
+    });
+    expect(login.status).toBe(200);
+    const { refreshToken } = login.body;
+
+    const first = await request(app).post('/auth/logout').send({ refreshToken });
+    expect(first.status).toBe(200);
+    expect(first.body.success).toBe(true);
+
+    const second = await request(app).post('/auth/logout').send({ refreshToken });
+    expect(second.status).toBe(200);
+    expect(second.body.success).toBe(true);
+  });
+
+  it('after logout, refresh token no longer works', async () => {
+    const login = await request(app).post('/auth/login').send({
+      email,
+      password: testPassword,
+    });
+    expect(login.status).toBe(200);
+    const { refreshToken } = login.body;
+
+    const out = await request(app).post('/auth/logout').send({ refreshToken });
+    expect(out.status).toBe(200);
+
+    const res = await request(app)
+      .post('/auth/token/refresh')
+      .send({ refreshToken });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('verifyToken middleware — edge cases', () => {
+  it('token with tampered payload is rejected', async () => {
+    const email = `test_${runId}_mw_tamper@hospital.com`;
+    await registerUser(email, '_mw_tamper');
+    const login = await request(app).post('/auth/login').send({
+      email,
+      password: testPassword,
+    });
+    expect(login.status).toBe(200);
+    const valid = login.body.accessToken;
+    expect(valid).toBeDefined();
+
+    const decoded = jwt.decode(valid);
+    const tamperedPayload = { ...(decoded || {}), role: 'admin' };
+    delete tamperedPayload.exp;
+    delete tamperedPayload.iat;
+    delete tamperedPayload.nbf;
+    const tampered = jwt.sign(tamperedPayload, 'definitely-not-the-real-secret', {
+      expiresIn: '15m',
+    });
+
+    const res = await request(app)
+      .get('/__test__/auth-context')
+      .set('Authorization', `Bearer ${tampered}`);
+    expect(res.status).toBe(401);
+  });
+
+  it('token issued for one user cannot be used as another', async () => {
+    const fake = jwt.sign(
+      { sub: 'fake-user-id', role: 'admin', email: 'fake@x.com' },
+      'wrong-secret',
+      { expiresIn: '15m' },
+    );
+
+    const res = await request(app)
+      .get('/audit/logs')
+      .set('Authorization', `Bearer ${fake}`);
+
+    expect([401, 403]).toContain(res.status);
+  });
+});
