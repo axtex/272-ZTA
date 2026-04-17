@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuth } from '../context/AuthContext.jsx';
 import DashboardPage from '../pages/DashboardPage.jsx';
+import { renderWithProviders } from '../test/utils.jsx';
 
 vi.mock('../context/AuthContext.jsx', () => ({
   useAuth: vi.fn(),
@@ -17,7 +18,7 @@ function renderDashboard() {
     ],
     { initialEntries: ['/dashboard'] },
   );
-  render(<RouterProvider router={router} />);
+  renderWithProviders(<RouterProvider router={router} />);
   return router;
 }
 
@@ -33,7 +34,7 @@ describe('DashboardPage', () => {
     });
     renderDashboard();
     expect(screen.getByText('My Patients')).toBeInTheDocument();
-    expect(screen.getByText('EHR Access')).toBeInTheDocument();
+    expect(screen.getByText('EHR Quick View')).toBeInTheDocument();
     expect(screen.getByText('Break-glass Emergency Access')).toBeInTheDocument();
   });
 
@@ -43,8 +44,8 @@ describe('DashboardPage', () => {
       logout: vi.fn().mockResolvedValue(undefined),
     });
     renderDashboard();
-    expect(screen.getByText('My Ward')).toBeInTheDocument();
     expect(screen.getByText('Patient Vitals')).toBeInTheDocument();
+    expect(screen.getByText('Update Vitals')).toBeInTheDocument();
   });
 
   it('shows admin-specific cards when role is admin', () => {
@@ -54,7 +55,7 @@ describe('DashboardPage', () => {
     });
     renderDashboard();
     expect(screen.getByText('User Management')).toBeInTheDocument();
-    expect(screen.getByText('Audit Logs')).toBeInTheDocument();
+    expect(screen.getByText('Audit Log')).toBeInTheDocument();
     expect(screen.getByText('Security Alerts')).toBeInTheDocument();
   });
 

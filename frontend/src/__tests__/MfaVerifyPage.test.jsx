@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MfaVerifyPage from '../pages/MfaVerifyPage.jsx';
+import { renderWithProviders } from '../test/utils.jsx';
 
 const { mockVerifyMfa } = vi.hoisted(() => ({
   mockVerifyMfa: vi.fn(),
@@ -23,7 +24,7 @@ function renderMfaVerify(entry) {
     ],
     { initialEntries: [entry] },
   );
-  render(<RouterProvider router={router} />);
+  renderWithProviders(<RouterProvider router={router} />);
   return router;
 }
 
