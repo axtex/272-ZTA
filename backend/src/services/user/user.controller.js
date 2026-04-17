@@ -79,6 +79,16 @@ async function assignDoctor(req, res) {
   }
 }
 
+async function unlockUser(req, res) {
+  try {
+    const adminUserId = req.user?.sub;
+    const result = await userService.unlockUser(req.params.id, adminUserId, req.ip || null);
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
 module.exports = {
   listUsers,
   getUser,
@@ -86,5 +96,6 @@ module.exports = {
   updateUser,
   deleteUser,
   assignDoctor,
+  unlockUser,
 };
 

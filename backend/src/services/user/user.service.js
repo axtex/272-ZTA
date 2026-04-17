@@ -175,6 +175,50 @@ async function assignDoctorToPatient(userId, patientId) {
   return { success: true };
 }
 
+async function unlockUser(userId, adminUserId, ipAddress) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, status: true },
+  });
+
+  if (!user) {
+    const err = new Error('Not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (user.status !== 'SUSPENDED') {
+    const err = new Error('Account is not locked');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { status: 'ACTIVE' },
+  });
+
+  await prisma.auditLog.deleteMany({
+    where: {
+      userId,
+      action: 'LOGIN_FAILED',
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: adminUserId ?? null,
+      action: 'ACCOUNT_UNLOCKED',
+      resourceId: userId,
+      decision: 'ALLOW',
+      trustScore: 100,
+      ipAddress: ipAddress ?? null,
+    },
+  });
+
+  return { success: true };
+}
+
 module.exports = {
   listUsers,
   getUser,
@@ -182,4 +226,5 @@ module.exports = {
   updateUser,
   deactivateUser,
   assignDoctorToPatient,
+  unlockUser,
 };

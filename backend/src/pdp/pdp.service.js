@@ -17,7 +17,7 @@ async function getEnforcer() {
 // ── Trust Score Calculator ────────────────────────────────────
 async function calculateTrustScore({ userId, userAgent, ipAddress }) {
   let score = 50;
-
+   
   const device = (userId && userAgent)
     ? await prisma.device.findFirst({
         where: { userId, userAgent },

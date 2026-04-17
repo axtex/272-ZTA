@@ -14,7 +14,7 @@ import {
   appSectionHeading,
   authInput,
 } from '../../design-system/patterns.js';
-import { createUser, deactivateUser, getAuditLogs, getUsers } from '../../lib/api.js';
+import { createUser, deactivateUser, getAuditLogs, getUsers, unlockUser } from '../../lib/api.js';
 
 function statusBadge(status) {
   const s = String(status ?? '').toUpperCase();
@@ -25,6 +25,16 @@ function statusBadge(status) {
         className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
       >
         ACTIVE
+      </Badge>
+    );
+  }
+  if (s === 'SUSPENDED') {
+    return (
+      <Badge
+        variant="soft"
+        className="bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300"
+      >
+        Locked
       </Badge>
     );
   }
@@ -62,6 +72,7 @@ export default function AdminDashboard() {
     roleName: 'doctor',
   });
   const [createNotice, setCreateNotice] = useState({ variant: '', message: '' });
+  const [actionNotice, setActionNotice] = useState({ variant: '', message: '' });
 
   const usersQuery = useQuery({
     queryKey: ['adminUsers'],
@@ -94,6 +105,20 @@ export default function AdminDashboard() {
     },
   });
 
+  const unlockMutation = useMutation({
+    mutationFn: (userId) => unlockUser(userId),
+    onSuccess: () => {
+      setActionNotice({ variant: 'success', message: 'Account unlocked' });
+      usersQuery.refetch();
+    },
+    onError: (err) => {
+      setActionNotice({
+        variant: 'error',
+        message: err?.response?.data?.error || err?.message || 'Failed to unlock account',
+      });
+    },
+  });
+
   const auditQuery = useQuery({
     queryKey: ['auditLogs'],
     queryFn: () => getAuditLogs(),
@@ -116,6 +141,11 @@ export default function AdminDashboard() {
       password: String(createForm.password ?? ''),
       roleName: createForm.roleName,
     });
+  }
+
+  function handleUnlock(userId) {
+    setActionNotice({ variant: '', message: '' });
+    unlockMutation.mutate(userId);
   }
 
   return (
@@ -179,6 +209,12 @@ export default function AdminDashboard() {
         ) : null}
 
         <div className="mt-5">
+          {actionNotice.message ? (
+            <Alert variant={actionNotice.variant || 'info'} className="mb-3">
+              {actionNotice.message}
+            </Alert>
+          ) : null}
+
           {usersQuery.isLoading ? (
             <div className="flex items-center gap-2">
               <Spinner size="sm" />
@@ -208,6 +244,7 @@ export default function AdminDashboard() {
                 {users.map((u) => {
                   const status = String(u?.status ?? 'ACTIVE').toUpperCase();
                   const canDeactivate = status === 'ACTIVE';
+                  const canUnlock = status === 'SUSPENDED';
                   return (
                     <div key={u?.id ?? u?.email} className={appDataRow}>
                       <div className={appDataValue}>{u?.email ?? '—'}</div>
@@ -225,9 +262,20 @@ export default function AdminDashboard() {
                           >
                             Deactivate
                           </Button>
-                        ) : (
-                          <span className={appMutedText}>—</span>
-                        )}
+                        ) : null}
+                        {canUnlock ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="px-2 py-1 text-xs"
+                            loading={unlockMutation.isPending && unlockMutation.variables === u?.id}
+                            spinner="dark"
+                            onClick={() => handleUnlock(u?.id)}
+                          >
+                            Unlock
+                          </Button>
+                        ) : null}
+                        {!canDeactivate && !canUnlock ? <span className={appMutedText}>—</span> : null}
                       </div>
                     </div>
                   );

@@ -4,9 +4,12 @@ const { evaluate } = require('../pdp/pdp.service');
 // Usage: router.get('/ehr', authenticate, pdp('ehr', 'read'), handler)
 function pdp(resource, action, getResourceId = (req) => req.params.id) {
   return async (req, res, next) => {
-    const userId     = req.user?.sub;
-    const rawRole = req.user?.role;
-    const role = rawRole
+    // Support both token formats:
+    // - old format: { sub, roleName } (our original auth.js)
+    // - new format: { userId, role } (teammate's auth.service.js)
+    const userId     = req.user?.userId || req.user?.sub;
+    const rawRole    = req.user?.role || req.user?.roleName;
+    const role       = rawRole
       ? rawRole.charAt(0).toUpperCase() + rawRole.slice(1).toLowerCase()
       : undefined;
     const ipAddress  = req.ip || req.headers['x-forwarded-for'];
