@@ -240,7 +240,7 @@ async function loginUser(email, password, deviceInfo) {
   // Block suspended accounts
   if (user.status === 'SUSPENDED') {
     throw Object.assign(
-      new Error('Account is locked due to too many failed login attempts. Contact admin.'),
+      new Error('Account locked: Too many failed login attempts. Contact your administrator to unlock.'),
       { statusCode: 403 },
     );
   }
