@@ -29,8 +29,11 @@ function verifyToken(req, res, next) {
 }
 
 function verifyRole(...roles) {
+  const allowed = roles.map((r) => String(r).toLowerCase());
   return function roleMiddleware(req, res, next) {
-    if (!req.user || !roles.includes(req.user.role)) {
+    const userRole =
+      req.user?.role != null ? String(req.user.role).toLowerCase() : '';
+    if (!req.user || !allowed.includes(userRole)) {
       return res.status(403).json({ error: 'Forbidden — insufficient role' });
     }
     next();

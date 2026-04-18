@@ -268,9 +268,10 @@ describe('verifyToken middleware', () => {
     expect(res.status).toBe(200);
     expect(res.body.user).toMatchObject({
       email: mwEmail,
-      role: 'Patient',
+      role: 'patient',
     });
     expect(res.body.user.userId).toBeDefined();
+    expect(res.body.user.sub).toBe(res.body.user.userId);
   });
 });
 
