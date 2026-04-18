@@ -10,10 +10,13 @@ export function AuthBadge({ children }) {
   return <Badge variant="accentDot">{children}</Badge>;
 }
 
-export function AuthShell({ badge, title, subtitle, children }) {
+export function AuthShell({ badge, title, subtitle, children, cardClassName = '' }) {
   return (
     <div className={authStage}>
-      <Card className="w-full max-w-[420px] text-left" variant="frosted">
+      <Card
+        className={['w-full max-w-[420px] text-left', cardClassName].filter(Boolean).join(' ')}
+        variant="frosted"
+      >
         <header className="mb-7 text-left">
           {badge}
           <h1 className={authTitle}>{title}</h1>

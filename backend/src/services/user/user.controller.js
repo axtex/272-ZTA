@@ -27,6 +27,15 @@ async function listUsers(req, res) {
   }
 }
 
+async function adminDashboardSummary(req, res) {
+  try {
+    const summary = await userService.getAdminDashboardSummary();
+    return res.status(200).json(summary);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
 async function getUser(req, res) {
   try {
     const user = await userService.getUser(req.params.id);
@@ -39,11 +48,19 @@ async function getUser(req, res) {
 
 async function createUser(req, res) {
   try {
-    const { username, email, password, roleName } = req.body || {};
+    const { username, email, password, roleName, firstName, lastName, department } = req.body || {};
     if (!username || !email || !password || !roleName) {
       return res.status(400).json({ error: 'username, email, password, and roleName are required' });
     }
-    const created = await userService.createUser({ username, email, password, roleName });
+    const created = await userService.createUser({
+      username,
+      email,
+      password,
+      roleName,
+      firstName,
+      lastName,
+      department,
+    });
     return res.status(201).json({ user: created });
   } catch (err) {
     return handleError(res, err);
@@ -52,7 +69,15 @@ async function createUser(req, res) {
 
 async function updateUser(req, res) {
   try {
-    const updates = pick(req.body || {}, ['username', 'email', 'roleName', 'status']);
+    const updates = pick(req.body || {}, [
+      'username',
+      'email',
+      'roleName',
+      'status',
+      'firstName',
+      'lastName',
+      'department',
+    ]);
     const user = await userService.updateUser(req.params.id, updates);
     return res.status(200).json({ user });
   } catch (err) {
@@ -80,6 +105,17 @@ async function assignDoctor(req, res) {
   }
 }
 
+async function unassignDoctorFromPatient(req, res) {
+  try {
+    const { patientId } = req.body || {};
+    if (!patientId) return res.status(400).json({ error: 'patientId is required' });
+    const result = await userService.unassignDoctorFromPatient(patientId);
+    return res.status(200).json(result);
+  } catch (err) {
+    return handleError(res, err);
+  }
+}
+
 async function unlockUser(req, res) {
   try {
     const adminUserId = tokenUserId(req.user);
@@ -92,11 +128,13 @@ async function unlockUser(req, res) {
 
 module.exports = {
   listUsers,
+  adminDashboardSummary,
   getUser,
   createUser,
   updateUser,
   deleteUser,
   assignDoctor,
+  unassignDoctorFromPatient,
   unlockUser,
 };
 

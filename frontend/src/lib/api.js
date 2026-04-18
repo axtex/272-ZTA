@@ -122,6 +122,22 @@ export async function getUsers(roleFilter) {
 }
 
 /**
+ * GET /users/summary (admin) — dashboard stat card aggregates.
+ * @returns {Promise<{
+ *   totalUsers: number,
+ *   lockedAccounts: number,
+ *   activeSessionsApprox: number,
+ *   deniedRequestsToday: number,
+ *   breakGlassEventsToday: number,
+ *   auditEventsToday: number
+ * }>}
+ */
+export async function getAdminDashboardSummary() {
+  const response = await api.get('/users/summary');
+  return response.data;
+}
+
+/**
  * POST /users
  * @param {any} data
  * @returns {Promise<any>} created user
@@ -164,6 +180,16 @@ export async function assignDoctor(userId, patientId) {
 }
 
 /**
+ * POST /users/assignments/unassign (admin)
+ * @param {string} patientId Patient profile id (Patient.id)
+ * @returns {Promise<{success: boolean}>}
+ */
+export async function unassignDoctor(patientId) {
+  const response = await api.post('/users/assignments/unassign', { patientId });
+  return response.data;
+}
+
+/**
  * POST /users/:userId/unlock
  * @param {string} userId
  * @returns {Promise<{success: boolean}>}
@@ -179,10 +205,16 @@ export async function unlockUser(userId) {
 
 /**
  * GET /audit/logs
- * @returns {Promise<any[]>} logs
+ * @param {{ decision?: string; action?: string; range?: string; take?: number; skip?: number }} [params]
+ * @returns {Promise<{ logs: any[]; total: number; take: number; skip: number }>}
  */
-export async function getAuditLogs() {
-  const response = await api.get('/audit/logs');
-  return response.data.logs;
+export async function getAuditLogs(params = {}) {
+  const response = await api.get('/audit/logs', { params });
+  const body = response.data ?? {};
+  const logs = Array.isArray(body.logs) ? body.logs : [];
+  const total = typeof body.total === 'number' ? body.total : logs.length;
+  const take = typeof body.take === 'number' ? body.take : logs.length;
+  const skip = typeof body.skip === 'number' ? body.skip : 0;
+  return { logs, total, take, skip };
 }
 
