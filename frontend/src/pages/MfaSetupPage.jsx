@@ -11,7 +11,7 @@ import {
 
 export default function MfaSetupPage() {
   const navigate = useNavigate();
-  const { setupMfa, confirmMfaSetup } = useAuth();
+  const { setupMfa, confirmMfaSetup, logout } = useAuth();
   const inputRef = useRef(null);
 
   const [step, setStep] = useState(1);
@@ -84,6 +84,11 @@ export default function MfaSetupPage() {
     }
   }
 
+  async function handleCancel() {
+    await logout();
+    navigate('/login');
+  }
+
   return (
     <AuthShell
       badge={<AuthBadge>Account security</AuthBadge>}
@@ -104,9 +109,9 @@ export default function MfaSetupPage() {
           <Button
             type="button"
             variant="secondary"
-            onClick={() => navigate('/dashboard')}
+            onClick={handleCancel}
           >
-            Back to dashboard
+            Back to login
           </Button>
         </div>
       )}
@@ -188,7 +193,7 @@ export default function MfaSetupPage() {
             Two-factor authentication is now enabled
           </Alert>
           <Button type="button" variant="primary" onClick={() => navigate('/dashboard')}>
-            Back to dashboard
+            Go to dashboard
           </Button>
         </div>
       )}
@@ -197,7 +202,7 @@ export default function MfaSetupPage() {
         <p className="mt-8 text-center">
           <button
             type="button"
-            onClick={() => navigate('/dashboard')}
+            onClick={handleCancel}
             className={authGhostLink}
           >
             Cancel
