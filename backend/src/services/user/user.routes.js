@@ -7,6 +7,8 @@ const router = express.Router();
 
 router.use(verifyToken, verifyRole('admin'));
 
+router.get('/summary', controller.adminDashboardSummary);
+router.post('/assignments/unassign', controller.unassignDoctorFromPatient);
 router.get('/', controller.listUsers);
 router.get('/:id', controller.getUser);
 router.post('/', controller.createUser);

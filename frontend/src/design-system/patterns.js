@@ -48,9 +48,12 @@ export const authFieldError =
 export const appPageBg =
   'min-h-screen bg-gradient-to-br from-ds-canvas-to via-ds-canvas-via to-ds-canvas-from/50 dark:from-slate-950 dark:via-slate-900 dark:to-violet-950/20';
 
-/** Sticky / top app header bar. */
+/** Max content width + horizontal padding (dashboard header row, `main`, etc.). */
+export const appShellInner = 'mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8';
+
+/** Sticky / top app header bar (full-bleed border/bg; pair inner row with `appShellInner`). */
 export const appHeaderBar =
-  'border-b border-ds-border/80 bg-ds-surface-glass px-4 py-5 shadow-sm backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/85 sm:px-6 lg:px-8';
+  'border-b border-ds-border/80 bg-ds-surface-glass py-5 shadow-sm backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-900/85';
 
 /** Content panel cards (grids, lists). */
 export const appPanelCard =

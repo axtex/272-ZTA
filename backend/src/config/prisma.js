@@ -10,8 +10,17 @@ function createClient() {
       'DATABASE_URL is not set in process.env. Set it in backend/.env or your environment.',
     );
   }
+  // Prisma ORM v7 uses the `pg` driver via `@prisma/adapter-pg`.
+  // Some environments (and some hosted Postgres providers) require TLS and may
+  // present certificate chains that Node doesn't validate by default.
+  //
+  // - Set `PG_SSL_REJECT_UNAUTHORIZED=true` to enforce strict validation.
+  // - Default is `false` to keep local/dev + Supabase demos working reliably.
+  const rejectUnauthorized = String(process.env.PG_SSL_REJECT_UNAUTHORIZED ?? 'false').toLowerCase() === 'true';
+
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized },
   });
   return new PrismaClient({
     adapter,
