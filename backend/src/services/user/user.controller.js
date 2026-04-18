@@ -1,4 +1,5 @@
 const userService = require('./user.service');
+const { tokenUserId } = require('../../utils/jwtPayload');
 
 function pick(body, keys) {
   const out = {};
@@ -81,7 +82,7 @@ async function assignDoctor(req, res) {
 
 async function unlockUser(req, res) {
   try {
-    const adminUserId = req.user?.sub;
+    const adminUserId = tokenUserId(req.user);
     const result = await userService.unlockUser(req.params.id, adminUserId, req.ip || null);
     return res.status(200).json(result);
   } catch (err) {
