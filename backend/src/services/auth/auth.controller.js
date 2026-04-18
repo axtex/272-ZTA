@@ -10,6 +10,9 @@ const {
 } = require('./auth.service');
 
 function handleAuthError(res, error) {
+  if (error && error.statusCode) {
+    return res.status(error.statusCode).json({ error: error.message });
+  }
   const msg = error.message;
   if (msg === 'User not found') {
     return res.status(404).json({ error: msg });

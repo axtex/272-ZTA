@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
- 
 }
 
 enum UserStatus {
@@ -39,6 +38,22 @@ model User {
   auditLogs        AuditLog[]
 
   @@map("users")
+}
+
+/// Read-only view of users joined with roles.role_name (for browsing; use User for writes).
+model UserWithRoleName {
+  id           String     @id @db.Uuid
+  username     String     @db.VarChar(50)
+  email        String     @db.VarChar(100)
+  passwordHash String     @map("password_hash")
+  roleId       String     @map("role_id") @db.Uuid
+  roleName     String     @map("role_name") @db.VarChar(50)
+  mfaSecret    String?    @map("mfa_secret") @db.VarChar(255)
+  mfaEnabled   Boolean    @map("mfa_enabled")
+  createdAt    DateTime   @map("created_at")
+  status       UserStatus
+
+  @@map("users_with_role_names")
 }
 
 model Role {
@@ -90,6 +105,19 @@ model Patient {
   @@map("patients")
 }
 
+/// Read-only view: patients plus patient account username/email (use Patient for writes).
+model PatientWithUserDetails {
+  id                  String   @id @db.Uuid
+  userId              String   @map("user_id") @db.Uuid
+  username            String   @db.VarChar(50)
+  email               String   @db.VarChar(100)
+  medicalRecordNumber String   @map("medical_record_number") @db.VarChar(50)
+  assignedDoctorId    String?  @map("assigned_doctor_id") @db.Uuid
+  createdAt           DateTime @map("created_at")
+
+  @@map("patients_with_user_details")
+}
+
 model Device {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
@@ -115,6 +143,18 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+/// Read-only view: refresh tokens plus user username/email (use RefreshToken for writes).
+model RefreshTokenWithUserDetails {
+  id        String   @id @db.Uuid
+  token     String   @db.VarChar(512)
+  userId    String   @map("user_id") @db.Uuid
+  username  String   @db.VarChar(50)
+  email     String   @db.VarChar(100)
+  expiresAt DateTime @map("expires_at")
+
+  @@map("refresh_tokens_with_user_details")
+}
+
 model EHR {
   id            String      @id @default(uuid()) @db.Uuid
   patientId     String      @map("patient_id") @db.Uuid
@@ -130,6 +170,23 @@ model EHR {
   @@map("ehr")
 }
 
+/// Read-only view: EHR plus patient & doctor username/email (use EHR for writes).
+model EHRWithUserEmails {
+  id              String   @id @db.Uuid
+  patientId       String   @map("patient_id") @db.Uuid
+  doctorId        String   @map("doctor_id") @db.Uuid
+  patientUsername String   @map("patient_username") @db.VarChar(50)
+  patientEmail    String   @map("patient_email") @db.VarChar(100)
+  doctorUsername  String   @map("doctor_username") @db.VarChar(50)
+  doctorEmail     String   @map("doctor_email") @db.VarChar(100)
+  diagnosis       String
+  vitals          Json?
+  s3FileKey       String?  @map("s3_file_key") @db.VarChar(255)
+  updatedAt       DateTime @map("updated_at")
+
+  @@map("ehr_with_user_emails")
+}
+
 model AuditLog {
   id           String        @id @default(uuid()) @db.Uuid
   timestamp    DateTime      @default(now())
@@ -143,4 +200,20 @@ model AuditLog {
   user         User?         @relation(fields: [userId], references: [id])
 
   @@map("audit_logs")
+}
+
+/// Read-only view: audit logs plus username/email when user_id is present (use AuditLog for writes).
+model AuditLogWithUserDetails {
+  id         String       @id @db.Uuid
+  timestamp  DateTime
+  userId     String?      @map("user_id") @db.Uuid
+  username   String?      @db.VarChar(50)
+  email      String?      @db.VarChar(100)
+  action     String       @db.VarChar(100)
+  resourceId String?      @map("resource_id") @db.VarChar(100)
+  decision   DecisionType
+  trustScore Int?         @map("trust_score")
+  ipAddress  String?      @map("ip_address") @db.VarChar(100)
+
+  @@map("audit_logs_with_user_details")
 }

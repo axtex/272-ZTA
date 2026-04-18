@@ -2,6 +2,7 @@ const express      = require('express');
 const prisma       = require('../db');
 const authenticate = require('../middleware/authenticate');
 const pdp          = require('../middleware/pdp.middleware');
+const { tokenUserId, tokenRoleKey } = require('../utils/jwtPayload');
 
 const router = express.Router();
 
@@ -13,8 +14,8 @@ router.get('/patients/:patientId/ehr',
   async (req, res, next) => {
     try {
       const { patientId } = req.params;
-      const role           = req.user.role;
-      const userId         = req.user.sub;
+      const role = tokenRoleKey(req.user);
+      const userId = tokenUserId(req.user);
 
       // Patient can only see their own records
       if (role === 'patient') {
@@ -58,7 +59,7 @@ router.get('/ehr/:id',
   pdp('ehr', 'read', (req) => req.params.id),
   async (req, res, next) => {
     try {
-      const role   = req.user.role;
+      const role = tokenRoleKey(req.user);
       const record = await prisma.eHR.findUnique({
         where: { id: req.params.id },
       });
@@ -69,7 +70,7 @@ router.get('/ehr/:id',
 
       if (role === 'patient') {
         const patient = await prisma.patient.findUnique({
-          where: { userId: req.user.sub },
+          where: { userId: tokenUserId(req.user) },
         });
         if (!patient || record.patientId !== patient.id) {
           return res.status(403).json({ error: 'Access denied' });
@@ -106,7 +107,7 @@ router.post('/ehr',
       const record = await prisma.eHR.create({
         data: {
           patientId,
-          doctorId: req.user.sub,
+          doctorId: tokenUserId(req.user),
           diagnosis,
           vitals:   vitals ?? {},
           s3FileKey: s3FileKey ?? null,
@@ -128,7 +129,7 @@ router.patch('/ehr/:id',
   pdp('ehr', 'write', (req) => req.params.id),
   async (req, res, next) => {
     try {
-      const role = req.user.role;
+      const role = tokenRoleKey(req.user);
       const { diagnosis, vitals, s3FileKey } = req.body;
 
       // Nurses can only update vitals
