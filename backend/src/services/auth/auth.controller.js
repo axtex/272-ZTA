@@ -34,8 +34,10 @@ function handleAuthError(res, error) {
 
 async function register(req, res) {
   try {
-    const { email, password, role } = req.body || {};
-    const user = await registerUser(email, password, role);
+    const body = req.body || {};
+    const { email, password, firstName, lastName } = body;
+    const roleName = body.roleName || body.role;
+    const user = await registerUser(email, password, roleName, { firstName, lastName });
     return res.status(201).json({ user });
   } catch (error) {
     if (error.statusCode) {

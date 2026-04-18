@@ -37,6 +37,7 @@ function userFromPayload(payload) {
     id: payload.userId,
     email: payload.email,
     role: payload.role,
+    firstName: payload.firstName ?? null,
   };
 }
 
