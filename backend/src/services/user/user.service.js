@@ -8,6 +8,12 @@ function stripPassword(user) {
   return rest;
 }
 
+function trimOptionalName(value) {
+  if (typeof value !== 'string') return undefined;
+  const t = value.trim();
+  return t.length ? t : undefined;
+}
+
 function normalizeStatus(status) {
   if (status == null) return undefined;
   if (typeof status !== 'string') return undefined;
@@ -31,10 +37,49 @@ async function listUsers({ roleName } = {}) {
     : undefined;
   const users = await prisma.user.findMany({
     where,
-    include: { role: true },
+    include: {
+      role: true,
+      patientProfile: {
+        select: {
+          id: true,
+          medicalRecordNumber: true,
+          assignedDoctorId: true,
+          assignedDoctor: { select: { id: true, email: true, firstName: true, lastName: true, department: true } },
+        },
+      },
+      devices: {
+        select: { lastSeen: true },
+        orderBy: { lastSeen: 'desc' },
+        take: 1,
+      },
+    },
     orderBy: { createdAt: 'desc' },
   });
-  return users.map(stripPassword);
+  return users.map((u) => {
+    const { devices, patientProfile, ...rest } = u;
+    const base = stripPassword(rest);
+    return {
+      ...base,
+      lastLoginAt: devices?.[0]?.lastSeen ?? null,
+      patient:
+        patientProfile != null
+          ? {
+              id: patientProfile.id,
+              medicalRecordNumber: patientProfile.medicalRecordNumber,
+              assignedDoctorId: patientProfile.assignedDoctorId,
+              assignedDoctor: patientProfile.assignedDoctor
+                ? {
+                    id: patientProfile.assignedDoctor.id,
+                    email: patientProfile.assignedDoctor.email,
+                    firstName: patientProfile.assignedDoctor.firstName,
+                    lastName: patientProfile.assignedDoctor.lastName,
+                    department: patientProfile.assignedDoctor.department,
+                  }
+                : null,
+            }
+          : null,
+    };
+  });
 }
 
 async function getUser(id) {
@@ -45,7 +90,7 @@ async function getUser(id) {
   return stripPassword(user);
 }
 
-async function createUser({ username, email, password, roleName }) {
+async function createUser({ username, email, password, roleName, firstName, lastName, department }) {
   const role = await findRoleByName(roleName);
   if (!role) {
     const err = new Error('Invalid role');
@@ -54,11 +99,17 @@ async function createUser({ username, email, password, roleName }) {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  const fn = trimOptionalName(firstName);
+  const ln = trimOptionalName(lastName);
+  const dept = trimOptionalName(department);
   try {
     const created = await prisma.user.create({
       data: {
         username,
         email,
+        firstName: fn,
+        lastName: ln,
+        department: dept ?? null,
         passwordHash,
         roleId: role.id,
         status: 'ACTIVE',
@@ -77,10 +128,20 @@ async function createUser({ username, email, password, roleName }) {
   }
 }
 
-async function updateUser(id, { username, email, roleName, status }) {
+async function updateUser(id, { username, email, roleName, status, firstName, lastName, department }) {
   const data = {};
   if (username !== undefined) data.username = username;
   if (email !== undefined) data.email = email;
+
+  if (firstName !== undefined) {
+    data.firstName = trimOptionalName(firstName) ?? null;
+  }
+  if (lastName !== undefined) {
+    data.lastName = trimOptionalName(lastName) ?? null;
+  }
+  if (department !== undefined) {
+    data.department = trimOptionalName(department) ?? null;
+  }
 
   if (roleName !== undefined) {
     const role = await findRoleByName(roleName);
@@ -175,6 +236,24 @@ async function assignDoctorToPatient(userId, patientId) {
   return { success: true };
 }
 
+async function unassignDoctorFromPatient(patientId) {
+  try {
+    await prisma.patient.update({
+      where: { id: patientId },
+      data: { assignedDoctorId: null },
+    });
+  } catch (e) {
+    if (e && e.code === 'P2025') {
+      const err = new Error('Patient not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    throw e;
+  }
+
+  return { success: true };
+}
+
 async function unlockUser(userId, adminUserId, ipAddress) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -219,6 +298,56 @@ async function unlockUser(userId, adminUserId, ipAddress) {
   return { success: true };
 }
 
+/** Aggregates for admin dashboard stat cards (accurate counts, not limited to list payloads). */
+async function getAdminDashboardSummary() {
+  const now = new Date();
+  const activeWindowStart = new Date(now.getTime() - 20 * 60 * 1000);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const [
+    totalUsers,
+    lockedAccounts,
+    activeDistinct,
+    deniedRequestsToday,
+    breakGlassEventsToday,
+    auditEventsToday,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { status: 'SUSPENDED' } }),
+    prisma.device.findMany({
+      where: { lastSeen: { gte: activeWindowStart } },
+      select: { userId: true },
+      distinct: ['userId'],
+    }),
+    prisma.auditLog.count({
+      where: {
+        decision: 'DENY',
+        timestamp: { gte: startOfToday },
+      },
+    }),
+    prisma.auditLog.count({
+      where: {
+        action: 'BREAK_GLASS',
+        timestamp: { gte: startOfToday },
+      },
+    }),
+    prisma.auditLog.count({
+      where: {
+        timestamp: { gte: startOfToday },
+      },
+    }),
+  ]);
+
+  return {
+    totalUsers,
+    lockedAccounts,
+    activeSessionsApprox: activeDistinct.length,
+    deniedRequestsToday,
+    breakGlassEventsToday,
+    auditEventsToday,
+  };
+}
+
 module.exports = {
   listUsers,
   getUser,
@@ -226,5 +355,7 @@ module.exports = {
   updateUser,
   deactivateUser,
   assignDoctorToPatient,
+  unassignDoctorFromPatient,
   unlockUser,
+  getAdminDashboardSummary,
 };

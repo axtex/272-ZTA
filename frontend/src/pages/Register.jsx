@@ -13,6 +13,8 @@ export default function Register() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     username: '',
+    firstName: '',
+    lastName: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -49,6 +51,8 @@ export default function Register() {
     try {
       const { data } = await api.post('/auth/register', {
         username: form.username.trim(),
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
         email: form.email.trim(),
         password: form.password,
         roleName: 'Patient',
@@ -74,23 +78,58 @@ export default function Register() {
       badge={<AuthBadge>Patient portal</AuthBadge>}
       title="Hospital Zero Trust"
       subtitle="Create a patient account to access your records and appointments."
+      cardClassName="max-w-[560px]"
     >
       <form
-        className="flex flex-col gap-5"
+        className="grid grid-cols-1 gap-5 md:grid-cols-2"
         onSubmit={handleSubmit}
         noValidate
       >
         {error ? (
-          <Alert variant="error" role="alert">
+          <Alert variant="error" role="alert" className="md:col-span-2">
             {error}
           </Alert>
         ) : null}
 
         {success ? (
-          <Alert variant="success" role="status">
+          <Alert variant="success" role="status" className="md:col-span-2">
             {success}
           </Alert>
         ) : null}
+
+        <div>
+          <label htmlFor="reg-first" className={authLabel}>
+            First name
+          </label>
+          <input
+            id="reg-first"
+            name="firstName"
+            type="text"
+            autoComplete="given-name"
+            placeholder="e.g. Jordan"
+            className={authInput}
+            value={form.firstName}
+            onChange={handleChange}
+            disabled={loading}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="reg-last" className={authLabel}>
+            Last name
+          </label>
+          <input
+            id="reg-last"
+            name="lastName"
+            type="text"
+            autoComplete="family-name"
+            placeholder="e.g. Lee"
+            className={authInput}
+            value={form.lastName}
+            onChange={handleChange}
+            disabled={loading}
+          />
+        </div>
 
         <div>
           <label htmlFor="reg-username" className={authLabel}>
@@ -165,6 +204,7 @@ export default function Register() {
           variant="primary"
           loading={loading}
           spinner="light"
+          className="md:col-span-2"
         >
           Create account
         </Button>

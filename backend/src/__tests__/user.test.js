@@ -106,6 +106,30 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+describe('GET /users/summary', () => {
+  it('200 with adminToken — returns dashboard aggregates', async () => {
+    const res = await request(app)
+      .get('/users/summary')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      totalUsers: expect.any(Number),
+      lockedAccounts: expect.any(Number),
+      activeSessionsApprox: expect.any(Number),
+      deniedRequestsToday: expect.any(Number),
+      breakGlassEventsToday: expect.any(Number),
+      auditEventsToday: expect.any(Number),
+    });
+  });
+
+  it('403 with doctorToken', async () => {
+    const res = await request(app)
+      .get('/users/summary')
+      .set('Authorization', `Bearer ${doctorToken}`);
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('GET /users', () => {
   it('200 with adminToken — returns array', async () => {
     const res = await request(app)
@@ -194,6 +218,16 @@ describe('POST /users', () => {
 });
 
 describe('PATCH /users/:id', () => {
+  it('200 admin updates firstName and lastName', async () => {
+    const res = await request(app)
+      .patch(`/users/${patientUser.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ firstName: 'Patient', lastName: 'One' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.firstName).toBe('Patient');
+    expect(res.body.user.lastName).toBe('One');
+  });
+
   it('200 admin updates status to INACTIVE', async () => {
     const res = await request(app)
       .patch(`/users/${doctorUser.id}`)
@@ -281,6 +315,41 @@ describe('POST /users/:id/assign', () => {
   it('404 if patient not found', async () => {
     const res = await request(app)
       .post(`/users/${doctorUser.id}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ patientId: '00000000-0000-0000-0000-000000000000' });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /users/assignments/unassign', () => {
+  it('200 admin clears assigned doctor', async () => {
+    await request(app)
+      .post(`/users/${doctorUser.id}/assign`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ patientId: patientProfile.id });
+
+    const res = await request(app)
+      .post('/users/assignments/unassign')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ patientId: patientProfile.id });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const updated = await prisma.patient.findUnique({ where: { id: patientProfile.id } });
+    expect(updated.assignedDoctorId).toBeNull();
+  });
+
+  it('400 without patientId', async () => {
+    const res = await request(app)
+      .post('/users/assignments/unassign')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('404 for unknown patient id', async () => {
+    const res = await request(app)
+      .post('/users/assignments/unassign')
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ patientId: '00000000-0000-0000-0000-000000000000' });
     expect(res.status).toBe(404);

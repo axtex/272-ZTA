@@ -24,10 +24,16 @@ function resolveRoleForToken(role) {
   throw new Error('Invalid role');
 }
 
+function trimOptionalName(value) {
+  if (typeof value !== 'string') return undefined;
+  const t = value.trim();
+  return t.length ? t : undefined;
+}
+
 async function issueTokens(userId, role) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true },
+    select: { email: true, firstName: true },
   });
   if (!user) {
     throw new Error('User not found');
@@ -37,7 +43,13 @@ async function issueTokens(userId, role) {
   const roleClaim =
     typeof roleValue === 'string' ? roleValue.toLowerCase() : String(roleValue);
   const accessToken = jwt.sign(
-    { userId, sub: userId, role: roleClaim, email: user.email },
+    {
+      userId,
+      sub: userId,
+      role: roleClaim,
+      email: user.email,
+      firstName: user.firstName || null,
+    },
     getJwtSecret(),
     { expiresIn: '15m' },
   );
@@ -58,7 +70,7 @@ async function issueTokens(userId, role) {
 }
 
 async function registerPatient(body, auditIp) {
-  const { username, email, password, roleName } = body;
+  const { username, email, password, roleName, firstName, lastName } = body;
 
   if (!username || typeof username !== 'string' || username.trim().length < 3) {
     const err = new Error('Username must be at least 3 characters');
@@ -125,6 +137,8 @@ async function registerPatient(body, auditIp) {
     data: {
       username: normalizedUsername,
       email: normalizedEmail,
+      firstName: trimOptionalName(firstName),
+      lastName: trimOptionalName(lastName),
       passwordHash,
       roleId: role.id,
       mfaEnabled: false,
@@ -163,7 +177,8 @@ async function registerPatient(body, auditIp) {
   };
 }
 
-async function registerUser(email, password, roleName) {
+async function registerUser(email, password, roleName, opts = {}) {
+  const { firstName, lastName } = opts || {};
   if (!email || typeof email !== 'string' || !email.includes('@')) {
     const err = new Error('Valid email is required');
     err.statusCode = 400;
@@ -202,6 +217,8 @@ async function registerUser(email, password, roleName) {
     data: {
       username,
       email: normalizedEmail,
+      firstName: trimOptionalName(firstName),
+      lastName: trimOptionalName(lastName),
       passwordHash,
       roleId: role.id,
       mfaEnabled: false,

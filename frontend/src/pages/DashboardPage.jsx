@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Badge, Button } from '../components/ui/index.js';
+import { Badge } from '../components/ui/index.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import DoctorDashboard from '../components/dashboard/DoctorDashboard.jsx';
 import NurseDashboard from '../components/dashboard/NurseDashboard.jsx';
@@ -10,6 +10,7 @@ import {
   appOutlineLink,
   appPageBg,
   appPanelCard,
+  appShellInner,
 } from '../design-system/patterns.js';
 
 function InfoCard({ title, children }) {
@@ -29,6 +30,17 @@ function normalizeRole(role) {
   return String(role ?? '').toLowerCase();
 }
 
+function welcomeFirstName(user) {
+  const fromToken = user?.firstName;
+  if (fromToken && String(fromToken).trim()) return String(fromToken).trim();
+  const email = user?.email;
+  if (!email || typeof email !== 'string' || !email.includes('@')) return 'there';
+  const local = email.split('@')[0];
+  const token = local.split(/[._-]/)[0] || local;
+  if (!token) return 'there';
+  return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -42,10 +54,10 @@ export default function DashboardPage() {
   return (
     <div className={appPageBg}>
       <header className={appHeaderBar}>
-        <div className="mx-auto flex max-w-6xl flex-wrap items-start justify-between gap-4">
+        <div className={`${appShellInner} flex flex-wrap items-start justify-between gap-4`}>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-xl font-semibold text-ds-text dark:text-white sm:text-2xl">
-              Welcome, {user?.email}
+              Welcome, {welcomeFirstName(user)}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge variant="soft">{user?.role ?? 'Unknown'}</Badge>
@@ -55,14 +67,18 @@ export default function DashboardPage() {
             <Link to="/mfa-setup" className={appOutlineLink}>
               Set up 2FA
             </Link>
-            <Button type="button" variant="secondary" onClick={handleLogout}>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className={`${appOutlineLink} border-slate-600 bg-slate-700 text-white shadow-sm hover:border-slate-500 hover:bg-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600`}
+            >
               Logout
-            </Button>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <main className={`${appShellInner} py-8`}>
         {roleKey === 'doctor' && <DoctorDashboard />}
 
         {roleKey === 'nurse' && <NurseDashboard />}

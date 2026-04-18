@@ -108,6 +108,7 @@ describe('GET /audit/logs', () => {
       .expect(200);
 
     expect(Array.isArray(res.body?.logs)).toBe(true);
+    expect(typeof res.body.total).toBe('number');
     expect(res.body.logs.length).toBeGreaterThanOrEqual(3);
 
     for (const log of res.body.logs.slice(0, 3)) {
@@ -145,14 +146,33 @@ describe('GET /audit/logs', () => {
     await request(app).get('/audit/logs').expect(401);
   });
 
-  test('response includes at most 100 entries', async () => {
+  test('response respects take cap and returns total', async () => {
     const res = await request(app)
-      .get('/audit/logs')
+      .get('/audit/logs?take=100')
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
 
     expect(Array.isArray(res.body?.logs)).toBe(true);
+    expect(res.body.take).toBe(100);
     expect(res.body.logs.length).toBeLessThanOrEqual(100);
+    expect(res.body.total).toBeGreaterThanOrEqual(res.body.logs.length);
+  });
+
+  test('decision filter reduces result set', async () => {
+    const all = await request(app)
+      .get('/audit/logs?take=100&range=all')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    const deny = await request(app)
+      .get('/audit/logs?take=100&range=all&decision=DENY')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(deny.body.total).toBeLessThanOrEqual(all.body.total);
+    for (const log of deny.body.logs) {
+      expect(log.decision).toBe('DENY');
+    }
   });
 });
 
