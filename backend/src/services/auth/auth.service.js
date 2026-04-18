@@ -34,8 +34,10 @@ async function issueTokens(userId, role) {
   }
 
   const roleValue = resolveRoleForToken(role);
+  const roleClaim =
+    typeof roleValue === 'string' ? roleValue.toLowerCase() : String(roleValue);
   const accessToken = jwt.sign(
-    { userId, role: roleValue, email: user.email },
+    { userId, sub: userId, role: roleClaim, email: user.email },
     getJwtSecret(),
     { expiresIn: '15m' },
   );

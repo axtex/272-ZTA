@@ -1,4 +1,5 @@
 const prisma = require('../../config/prisma');
+const { tokenUserId, tokenRoleKey } = require('../../utils/jwtPayload');
 
 function makeError(message, statusCode) {
   const err = new Error(message);
@@ -21,7 +22,7 @@ function filterRecordForRole(record, role) {
 }
 
 async function getEhrRecord(ehrId, requestingUser) {
-  const role = requestingUser?.role;
+  const role = tokenRoleKey(requestingUser);
   if (role === 'admin') throw makeError('Access denied', 403);
 
   const record = await prisma.eHR.findUnique({
@@ -31,8 +32,9 @@ async function getEhrRecord(ehrId, requestingUser) {
   if (!record) throw makeError('Not found', 404);
 
   if (role === 'patient') {
+    const uid = tokenUserId(requestingUser);
     const patient = await prisma.patient.findUnique({
-      where: { userId: requestingUser.sub },
+      where: { userId: uid },
     });
     if (!patient || patient.id !== record.patientId) throw makeError('Access denied', 403);
     return {
@@ -48,14 +50,14 @@ async function getEhrRecord(ehrId, requestingUser) {
 }
 
 async function createEhrRecord(data, requestingUser) {
-  const role = requestingUser?.role;
+  const role = tokenRoleKey(requestingUser);
   if (role !== 'doctor') throw makeError('Access denied', 403);
 
   const { patientId, diagnosis, vitals, s3FileKey } = data || {};
   const record = await prisma.eHR.create({
     data: {
       patientId,
-      doctorId: requestingUser.sub,
+      doctorId: tokenUserId(requestingUser),
       diagnosis,
       vitals: vitals ?? {},
       s3FileKey: s3FileKey ?? null,
@@ -65,7 +67,7 @@ async function createEhrRecord(data, requestingUser) {
 }
 
 async function updateEhrRecord(ehrId, data, requestingUser) {
-  const role = requestingUser?.role;
+  const role = tokenRoleKey(requestingUser);
   if (role === 'admin' || role === 'patient') throw makeError('Access denied', 403);
 
   const existing = await prisma.eHR.findUnique({ where: { id: ehrId } });
@@ -92,7 +94,7 @@ async function updateEhrRecord(ehrId, data, requestingUser) {
 }
 
 async function getPatientEhr(patientId, requestingUser) {
-  const role = requestingUser?.role;
+  const role = tokenRoleKey(requestingUser);
   if (role === 'admin') throw makeError('Access denied', 403);
 
   const patient = await prisma.patient.findUnique({
@@ -100,10 +102,11 @@ async function getPatientEhr(patientId, requestingUser) {
   });
   if (!patient) throw makeError('Not found', 404);
 
+  const uid = tokenUserId(requestingUser);
   if (role === 'doctor') {
-    if (patient.assignedDoctorId !== requestingUser.sub) throw makeError('Access denied', 403);
+    if (patient.assignedDoctorId !== uid) throw makeError('Access denied', 403);
   } else if (role === 'patient') {
-    if (patient.userId !== requestingUser.sub) throw makeError('Access denied', 403);
+    if (patient.userId !== uid) throw makeError('Access denied', 403);
   } else if (role === 'nurse') {
     // Allowed: no nurse assignment model exists
   } else {
@@ -129,14 +132,14 @@ async function getPatientEhr(patientId, requestingUser) {
 }
 
 async function breakGlassAccess(patientId, requestingUser) {
-  const role = requestingUser?.role;
+  const role = tokenRoleKey(requestingUser);
   if (role !== 'doctor') throw makeError('Access denied', 403);
 
   // AuditLog schema fields are: userId, action, resourceId, decision, trustScore, ipAddress, timestamp
   // DecisionType enum does NOT include OVERRIDE in schema; use ALLOW to record the override event.
   await prisma.auditLog.create({
     data: {
-      userId: requestingUser.sub,
+      userId: tokenUserId(requestingUser),
       action: 'BREAK_GLASS',
       resourceId: String(patientId),
       decision: 'ALLOW',
