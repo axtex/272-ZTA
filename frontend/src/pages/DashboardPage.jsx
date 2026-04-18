@@ -70,7 +70,7 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={handleLogout}
-              className={`${appOutlineLink} border-slate-600 bg-slate-700 text-white shadow-sm hover:border-slate-500 hover:bg-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600`}
+              className={appOutlineLink}
             >
               Logout
             </button>
