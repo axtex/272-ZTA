@@ -33,7 +33,7 @@ function trimOptionalName(value) {
 async function issueTokens(userId, role) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, firstName: true },
+    select: { email: true, firstName: true, mfaEnabled: true },
   });
   if (!user) {
     throw new Error('User not found');
@@ -49,6 +49,7 @@ async function issueTokens(userId, role) {
       role: roleClaim,
       email: user.email,
       firstName: user.firstName || null,
+      mfaEnabled: user.mfaEnabled ?? false,
     },
     getJwtSecret(),
     { expiresIn: '15m' },
@@ -256,7 +257,6 @@ async function loginUser(email, password, deviceInfo) {
     throw new Error('Invalid credentials');
   }
 
-  // Block suspended accounts
   if (user.status === 'SUSPENDED') {
     throw Object.assign(
       new Error('Account locked: Too many failed login attempts. Contact your administrator to unlock.'),
@@ -264,7 +264,6 @@ async function loginUser(email, password, deviceInfo) {
     );
   }
 
-  // Block disabled accounts
   if (user.status === 'DISABLED') {
     throw Object.assign(
       new Error('Account is disabled. Contact admin.'),
@@ -275,12 +274,10 @@ async function loginUser(email, password, deviceInfo) {
   const passwordOk = await bcrypt.compare(password, user.passwordHash);
 
   if (!passwordOk) {
-    // Record failed login — auto-locks after 5 attempts
     await recordFailedLogin(user.id, deviceInfo?.ip ?? null);
     throw new Error('Invalid credentials');
   }
 
-  // Successful login — upsert device
   const userAgent = deviceInfo?.userAgent ?? 'unknown';
   await prisma.device.upsert({
     where: {

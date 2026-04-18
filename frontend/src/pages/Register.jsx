@@ -9,6 +9,33 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000',
 });
 
+function EyeIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  );
+}
+
+function validatePassword(password) {
+  if (password.length < 8) return 'Password must be at least 8 characters';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least 1 number';
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password))
+    return 'Password must contain at least 1 special character (!@#$%^&* etc.)';
+  return null;
+}
+
 export default function Register() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
@@ -19,9 +46,11 @@ export default function Register() {
     password: '',
     confirmPassword: '',
   });
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [error, setError]               = useState('');
+  const [success, setSuccess]           = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm]   = useState(false);
 
   function handleChange(e) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -40,9 +69,10 @@ export default function Register() {
     if (!form.email.includes('@')) {
       return setError('Please enter a valid email address');
     }
-    if (form.password.length < 8) {
-      return setError('Password must be at least 8 characters');
-    }
+
+    const passwordError = validatePassword(form.password);
+    if (passwordError) return setError(passwordError);
+
     if (form.password !== form.confirmPassword) {
       return setError('Passwords do not match');
     }
@@ -50,28 +80,38 @@ export default function Register() {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/register', {
-        username: form.username.trim(),
+        username:  form.username.trim(),
         firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
-        email: form.email.trim(),
-        password: form.password,
-        roleName: 'Patient',
+        lastName:  form.lastName.trim(),
+        email:     form.email.trim(),
+        password:  form.password,
+        roleName:  'Patient',
       });
 
-      setSuccess(
-        `Account created for ${data.user.username}! Redirecting to login…`,
-      );
+      setSuccess(`Account created for ${data.user.username}! Redirecting to login…`);
       setTimeout(() => {
         navigate('/login?registered=true');
       }, 2500);
     } catch (err) {
-      setError(
-        err.response?.data?.error || 'Registration failed. Please try again.',
-      );
+      setError(err.response?.data?.error || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   }
+
+  const eyeButtonStyle = {
+    position: 'absolute',
+    right: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'var(--color-text-secondary)',
+    padding: '0',
+    display: 'flex',
+    alignItems: 'center',
+  };
 
   return (
     <AuthShell
@@ -165,38 +205,62 @@ export default function Register() {
           />
         </div>
 
-        <div>
+        <div className="md:col-span-2">
           <label htmlFor="reg-password" className={authLabel}>
             Password
           </label>
-          <input
-            id="reg-password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Min. 8 characters"
-            className={authInput}
-            value={form.password}
-            onChange={handleChange}
-            disabled={loading}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              id="reg-password"
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password"
+              placeholder="Min. 8 chars, 1 number & 1 special character"
+              className={authInput}
+              style={{ paddingRight: '42px' }}
+              value={form.password}
+              onChange={handleChange}
+              disabled={loading}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={eyeButtonStyle}
+              tabIndex={-1}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
         </div>
 
-        <div>
+        <div className="md:col-span-2">
           <label htmlFor="reg-confirm" className={authLabel}>
             Confirm password
           </label>
-          <input
-            id="reg-confirm"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Repeat your password"
-            className={authInput}
-            value={form.confirmPassword}
-            onChange={handleChange}
-            disabled={loading}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              id="reg-confirm"
+              name="confirmPassword"
+              type={showConfirm ? 'text' : 'password'}
+              autoComplete="new-password"
+              placeholder="Repeat your password"
+              className={authInput}
+              style={{ paddingRight: '42px' }}
+              value={form.confirmPassword}
+              onChange={handleChange}
+              disabled={loading}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm(!showConfirm)}
+              style={eyeButtonStyle}
+              tabIndex={-1}
+              aria-label={showConfirm ? 'Hide password' : 'Show password'}
+            >
+              {showConfirm ? <EyeOffIcon /> : <EyeIcon />}
+            </button>
+          </div>
         </div>
 
         <Button
