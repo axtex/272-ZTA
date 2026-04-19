@@ -54,6 +54,41 @@ export async function getPatientEhr(patientId) {
 }
 
 /**
+ * GET /api/v2/patient/ehr — authenticated patient’s own EHR list (resolves patient profile from token).
+ * @returns {Promise<any[]>}
+ */
+export async function getMyPatientEhr() {
+  const response = await api.get('/api/v2/patient/ehr');
+  return response.data.records;
+}
+
+/**
+ * GET /api/v2/patient/profile — MRN, assigned doctor, account fields for signed-in patient.
+ * @returns {Promise<{
+ *   medicalRecordNumber: string,
+ *   assignedDoctorDisplayName: string | null,
+ *   assignedDoctorDepartment: string | null,
+ *   email: string | null,
+ *   firstName: string | null,
+ *   lastName: string | null,
+ *   filesStorageAvailable: boolean
+ * }>}
+ */
+export async function getPatientProfileMe() {
+  const response = await api.get('/api/v2/patient/profile');
+  return response.data;
+}
+
+/**
+ * GET /audit/my-login-activity — patient-only recent sign-in audit rows.
+ * @returns {Promise<Array<{ id: string, timestamp: string, actionLabel: string, ipAddress: string | null, deviceLabel: string }>>}
+ */
+export async function getPatientMyLoginActivity() {
+  const response = await api.get('/audit/my-login-activity');
+  return Array.isArray(response.data?.logs) ? response.data.logs : [];
+}
+
+/**
  * POST /api/v2/ehr
  * @param {any} data
  * @returns {Promise<any>} created record
@@ -68,8 +103,83 @@ export async function createEhrRecord(data) {
  * @param {string} patientId
  * @returns {Promise<{success: boolean, message?: string}>}
  */
-export async function breakGlassAccess(patientId) {
-  const response = await api.post(`/api/v2/patients/${patientId}/break-glass`);
+export async function breakGlassAccess(patientId, body = {}) {
+  const response = await api.post(`/api/v2/patients/${patientId}/break-glass`, body);
+  return response.data;
+}
+
+/**
+ * GET /api/v2/doctor/assigned-patients
+ * @returns {Promise<{
+ *   patients: any[],
+ *   stats: { myPatients: number, ehrRecords: number, pendingFiles: number, lastAccessAt: string | null },
+ *   filesStorageAvailable: boolean
+ * }>}
+ */
+export async function getDoctorAssignedPatients() {
+  const response = await api.get('/api/v2/doctor/assigned-patients');
+  return response.data;
+}
+
+/**
+ * GET /api/v2/doctor/access-log
+ * @param {{ take?: number; skip?: number; action?: string }} [params]
+ * @returns {Promise<{ logs: any[]; total: number; take: number; skip: number }>}
+ */
+export async function getDoctorAccessLog(params = {}) {
+  const response = await api.get('/api/v2/doctor/access-log', { params });
+  const body = response.data ?? {};
+  const logs = Array.isArray(body.logs) ? body.logs : [];
+  const total = typeof body.total === 'number' ? body.total : logs.length;
+  const take = typeof body.take === 'number' ? body.take : logs.length;
+  const skip = typeof body.skip === 'number' ? body.skip : 0;
+  return { ...body, logs, total, take, skip };
+}
+
+/**
+ * GET /api/v2/nurse/patients
+ * @returns {Promise<{ patients: any[] }>}
+ */
+export async function getNursePatients() {
+  const response = await api.get('/api/v2/nurse/patients');
+  return response.data ?? {};
+}
+
+/**
+ * GET /api/v2/nurse/summary
+ * @returns {Promise<{
+ *   myPatients: number,
+ *   vitalsUpdatedToday: number,
+ *   pendingVitals: number,
+ *   lastActivityAt: string | null
+ * }>}
+ */
+export async function getNurseDashboardSummary() {
+  const response = await api.get('/api/v2/nurse/summary');
+  return response.data ?? {};
+}
+
+/**
+ * GET /api/v2/nurse/access-log
+ * @param {{ take?: number; skip?: number; action?: string }} [params]
+ * @returns {Promise<{ logs: any[]; total: number; take: number; skip: number }>}
+ */
+export async function getNurseAccessLog(params = {}) {
+  const response = await api.get('/api/v2/nurse/access-log', { params });
+  const body = response.data ?? {};
+  const logs = Array.isArray(body.logs) ? body.logs : [];
+  const total = typeof body.total === 'number' ? body.total : logs.length;
+  const take = typeof body.take === 'number' ? body.take : logs.length;
+  const skip = typeof body.skip === 'number' ? body.skip : 0;
+  return { ...body, logs, total, take, skip };
+}
+
+/**
+ * POST /api/v2/doctor/break-glass
+ * @param {{ patientIdentifier: string; reason: string; reasonDetail?: string }} body
+ */
+export async function requestDoctorBreakGlass(body) {
+  const response = await api.post('/api/v2/doctor/break-glass', body);
   return response.data;
 }
 
@@ -78,7 +188,7 @@ export async function breakGlassAccess(patientId) {
  * Backend currently expects JSON: { filename, mimetype, contentBase64 }.
  * @param {string} ehrId
  * @param {File} file
- * @returns {Promise<{s3Key: string, filename: string}>}
+ * @returns {Promise<{ fileKey: string, filename: string }>}
  */
 export async function uploadEhrFile(ehrId, file) {
   const contentBase64 = await fileToBase64(file);
@@ -92,7 +202,7 @@ export async function uploadEhrFile(ehrId, file) {
     headers: { 'Content-Type': 'application/json' },
   });
 
-  return { s3Key: response.data.s3Key, filename: payload.filename };
+  return { fileKey: response.data.fileKey, filename: payload.filename };
 }
 
 /**

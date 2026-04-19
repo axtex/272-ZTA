@@ -449,6 +449,12 @@ function displayResourceId(resourceId) {
 const FAILED_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOCKOUT_FAILED_ATTEMPTS = 5;
 
+/** Newest event time for a security alert row (tab badge “unseen” uses this vs last visit). */
+function securityAlertCandidateTime(c) {
+  if (c.kind === 'LOGIN_FAILED_GROUP') return new Date(c.latest.timestamp).getTime();
+  return new Date(c.log.timestamp).getTime();
+}
+
 function groupLoginFailedClusters(logs) {
   const byUser = new Map();
   for (const log of logs) {
@@ -488,18 +494,14 @@ function groupLoginFailedClusters(logs) {
 function buildSecurityAlertCandidates(feedLogs, { reviewedBreakGlassIds, usersById }) {
   const reviewed = new Set(reviewedBreakGlassIds);
   const emailFor = (uid) => (uid ? usersById.get(uid)?.email : null) ?? null;
-  const isSuspended = (uid) => {
-    const u = uid ? usersById.get(uid) : null;
-    if (!u) return true;
-    return String(u.status ?? '').toUpperCase() === 'SUSPENDED';
-  };
 
   const rows = [];
 
   for (const log of feedLogs) {
     if (!log?.timestamp) continue;
     const action = log.action;
-    if (action === 'ACCOUNT_LOCKED' && log.userId && isSuspended(log.userId)) {
+    /** Keep lock events in the feed after unlock (historical); do not gate on current user status. */
+    if (action === 'ACCOUNT_LOCKED' && log.userId) {
       rows.push({
         kind: 'ACCOUNT_LOCKED',
         id: log.id,
@@ -630,6 +632,8 @@ export default function AdminDashboard() {
   const [auditDateRange, setAuditDateRange] = useState('all');
   const [reviewedBreakGlassIds, setReviewedBreakGlassIds] = useState([]);
   const [breakGlassReviewLog, setBreakGlassReviewLog] = useState(null);
+  /** When the admin last opened Security Alerts or dismissed items; badge shows only newer events. */
+  const [securityAlertsLastCheckedAt, setSecurityAlertsLastCheckedAt] = useState(null);
 
   const usersQuery = useQuery({
     queryKey: ['adminUsers', roleFilter],
@@ -844,7 +848,13 @@ export default function AdminDashboard() {
     const start = (securityPageSafe - 1) * SECURITY_PAGE_SIZE;
     return securityAlertCandidates.slice(start, start + SECURITY_PAGE_SIZE);
   }, [securityAlertCandidates, securityPageSafe]);
-  const securityAlertBadgeCount = securityAlertCandidates.filter((c) => c.kind !== 'ACCOUNT_UNLOCKED').length;
+  const securityAlertBadgeCount = useMemo(() => {
+    if (activeTab === 'alerts') return 0;
+    const base = securityAlertCandidates.filter((c) => c.kind !== 'ACCOUNT_UNLOCKED');
+    if (securityAlertsLastCheckedAt == null) return base.length;
+    const ack = securityAlertsLastCheckedAt;
+    return base.filter((c) => securityAlertCandidateTime(c) > ack).length;
+  }, [activeTab, securityAlertCandidates, securityAlertsLastCheckedAt]);
 
   function handleCreateSubmit(e) {
     e.preventDefault();
@@ -985,6 +995,11 @@ export default function AdminDashboard() {
     if (activeTab !== 'alerts') return;
     setSecurityPage(1);
   }, [activeTab, securityAlertCandidates.length]);
+
+  useEffect(() => {
+    if (activeTab !== 'alerts') return;
+    setSecurityAlertsLastCheckedAt(Date.now());
+  }, [activeTab]);
 
   const sm = summaryQuery.data;
   const totalUsers = sm?.totalUsers ?? 0;
@@ -1712,6 +1727,7 @@ export default function AdminDashboard() {
                         prev.includes(breakGlassReviewLog.id) ? prev : [...prev, breakGlassReviewLog.id],
                       );
                     }
+                    setSecurityAlertsLastCheckedAt(Date.now());
                     setBreakGlassReviewLog(null);
                   }}
                 >
@@ -1730,9 +1746,9 @@ export default function AdminDashboard() {
                   return (
                     <li
                       key={row.id}
-                      className="flex flex-col gap-2 rounded-lg border border-red-200/80 bg-red-50/35 p-4 dark:border-red-900/45 dark:bg-red-950/20 sm:flex-row sm:items-center sm:justify-between"
+                      className="rounded-lg border border-red-200/80 bg-red-50/35 p-4 dark:border-red-900/45 dark:bg-red-950/20"
                     >
-                      <div className="min-w-0 flex-1 space-y-1">
+                      <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className={appDecisionDeny}>ACCOUNT_LOCKED</span>
                           <span className={`${appMutedText} text-xs`}>{formatTimestamp(log.timestamp)}</span>
@@ -1741,18 +1757,6 @@ export default function AdminDashboard() {
                           {row.userEmail} locked after {LOCKOUT_FAILED_ATTEMPTS} failed login attempts
                         </p>
                       </div>
-                      {log.userId ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="shrink-0 border border-red-300/80 px-3 py-1.5 text-xs text-red-800 hover:bg-red-100/80 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-950/50"
-                          loading={unlockMutation.isPending && unlockMutation.variables === log.userId}
-                          spinner="dark"
-                          onClick={() => handleUnlock(log.userId)}
-                        >
-                          Unlock
-                        </Button>
-                      ) : null}
                     </li>
                   );
                 }

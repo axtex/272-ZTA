@@ -35,10 +35,16 @@ function userFromPayload(payload) {
   if (!payload?.userId) return null;
   return {
     id: payload.userId,
+    sub: payload.sub ?? payload.userId,
     email: payload.email,
     role: payload.role,
     firstName: payload.firstName ?? null,
+    department: payload.department ?? null,
     mfaEnabled: payload.mfaEnabled ?? false,
+    assignedDoctorName:
+      typeof payload.assignedDoctorName === 'string' && payload.assignedDoctorName.trim()
+        ? payload.assignedDoctorName.trim()
+        : null,
   };
 }
 

@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
+const speakeasy = require('speakeasy');
 
 const app = require('../index');
 const prisma = require('../config/prisma');
@@ -134,6 +135,78 @@ describe('POST /auth/login', () => {
     });
     expect(res.status).toBe(401);
     expect(res.body.error).toMatch(/invalid credentials/i);
+  });
+});
+
+describe('POST /auth/mfa/validate', () => {
+  const mfaEmail = `test_${runId}_mfa_lock@hospital.com`;
+  let mfaSecretBase32;
+
+  beforeAll(async () => {
+    await registerUser(mfaEmail, '_mfa_lock');
+    const secret = speakeasy.generateSecret({ length: 20 });
+    mfaSecretBase32 = secret.base32;
+    const user = await prisma.user.findUnique({ where: { email: mfaEmail.toLowerCase() } });
+    expect(user).toBeTruthy();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { mfaSecret: mfaSecretBase32, mfaEnabled: true },
+    });
+  });
+
+  it('login returns MFA challenge for MFA-enabled user', async () => {
+    const res = await request(app).post('/auth/login').send({
+      email: mfaEmail,
+      password: testPassword,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.mfaRequired).toBe(true);
+    expect(res.body.tempToken).toBeTruthy();
+  });
+
+  it('successful MFA clears LOGIN_FAILED audit rows', async () => {
+    const user = await prisma.user.findUnique({ where: { email: mfaEmail.toLowerCase() } });
+    await prisma.auditLog.deleteMany({ where: { userId: user.id } });
+    await prisma.user.update({ where: { id: user.id }, data: { status: 'ACTIVE' } });
+
+    const login1 = await request(app).post('/auth/login').send({ email: mfaEmail, password: testPassword });
+    const bad = await request(app)
+      .post('/auth/mfa/validate')
+      .send({ tempToken: login1.body.tempToken, code: '000000' });
+    expect(bad.status).toBe(401);
+
+    const failCount = await prisma.auditLog.count({ where: { userId: user.id, action: 'LOGIN_FAILED' } });
+    expect(failCount).toBe(1);
+
+    const login2 = await request(app).post('/auth/login').send({ email: mfaEmail, password: testPassword });
+    const goodCode = speakeasy.totp({ secret: mfaSecretBase32, encoding: 'base32' });
+    const ok = await request(app)
+      .post('/auth/mfa/validate')
+      .send({ tempToken: login2.body.tempToken, code: goodCode });
+    expect(ok.status).toBe(200);
+    expect(ok.body.accessToken).toBeDefined();
+
+    const cleared = await prisma.auditLog.count({ where: { userId: user.id, action: 'LOGIN_FAILED' } });
+    expect(cleared).toBe(0);
+  });
+
+  it('locks account after 5 invalid MFA attempts (same window as password failures)', async () => {
+    const user = await prisma.user.findUnique({ where: { email: mfaEmail.toLowerCase() } });
+    await prisma.auditLog.deleteMany({ where: { userId: user.id } });
+    await prisma.user.update({ where: { id: user.id }, data: { status: 'ACTIVE' } });
+
+    let lastStatus;
+    for (let i = 0; i < 5; i += 1) {
+      const login = await request(app).post('/auth/login').send({ email: mfaEmail, password: testPassword });
+      const r = await request(app)
+        .post('/auth/mfa/validate')
+        .send({ tempToken: login.body.tempToken, code: '000001' });
+      lastStatus = r.status;
+    }
+    expect(lastStatus).toBe(403);
+
+    const updated = await prisma.user.findUnique({ where: { id: user.id } });
+    expect(updated.status).toBe('SUSPENDED');
   });
 });
 

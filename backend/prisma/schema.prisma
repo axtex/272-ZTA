@@ -167,6 +167,7 @@ model EHR {
   doctorId      String      @map("doctor_id") @db.Uuid
   diagnosis     String
   vitals        Json?
+  /// Path/key of object in Supabase Storage (DB column name kept as s3_file_key for compatibility).
   s3FileKey     String?     @map("s3_file_key") @db.VarChar(255)
   updatedAt     DateTime    @default(now()) @updatedAt @map("updated_at")
 
@@ -187,6 +188,7 @@ model EHRWithUserEmails {
   doctorEmail     String   @map("doctor_email") @db.VarChar(100)
   diagnosis       String
   vitals          Json?
+  /// Supabase Storage object path (legacy column name s3_file_key).
   s3FileKey       String?  @map("s3_file_key") @db.VarChar(255)
   updatedAt       DateTime @map("updated_at")
 
@@ -202,6 +204,7 @@ model AuditLog {
   decision     DecisionType
   trustScore   Int?          @map("trust_score")
   ipAddress    String?       @map("ip_address") @db.VarChar(100)
+  details      Json?         @map("details")
 
   user         User?         @relation(fields: [userId], references: [id])
 
@@ -220,6 +223,7 @@ model AuditLogWithUserDetails {
   decision   DecisionType
   trustScore Int?         @map("trust_score")
   ipAddress  String?      @map("ip_address") @db.VarChar(100)
+  details    Json?        @map("details")
 
   @@map("audit_logs_with_user_details")
 }

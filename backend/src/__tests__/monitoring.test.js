@@ -223,7 +223,7 @@ describe('monitoring', () => {
       expect(user.status).toBe('ACTIVE');
     });
 
-    test('unlock clears LOGIN_FAILED audit logs', async () => {
+    test('unlock keeps LOGIN_FAILED history (lockout counter resets via ACCOUNT_UNLOCKED)', async () => {
       await prisma.user.update({
         where: { id: lockTarget.id },
         data: { status: 'SUSPENDED' },
@@ -250,7 +250,7 @@ describe('monitoring', () => {
         userId: lockTarget.id,
         action: 'LOGIN_FAILED',
       });
-      expect(failedCount).toBe(0);
+      expect(failedCount).toBe(3);
     });
 
     test('cannot unlock an account that is not suspended', async () => {
