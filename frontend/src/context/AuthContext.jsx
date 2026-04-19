@@ -1,4 +1,4 @@
-/* eslint-disable react-refresh/only-export-components -- context + hook pattern */
+
 import {
   createContext,
   useCallback,
@@ -38,6 +38,7 @@ function userFromPayload(payload) {
     email: payload.email,
     role: payload.role,
     firstName: payload.firstName ?? null,
+    mfaEnabled: payload.mfaEnabled ?? false,
   };
 }
 
@@ -69,16 +70,18 @@ export function AuthProvider({ children }) {
     }
     setTokens(data.accessToken, data.refreshToken);
     const payload = decodeAccessTokenPayload(data.accessToken);
-    setUser(userFromPayload(payload));
-    return { mfaRequired: false };
+    const userObj = userFromPayload(payload);
+    setUser(userObj);
+    return { mfaRequired: false, mfaEnabled: userObj?.mfaEnabled ?? false };
   }, []);
 
   const verifyMfa = useCallback(async (tempToken, code) => {
     const { data } = await api.post('/auth/mfa/validate', { tempToken, code });
     setTokens(data.accessToken, data.refreshToken);
     const payload = decodeAccessTokenPayload(data.accessToken);
-    setUser(userFromPayload(payload));
-    return data;
+    const userObj = userFromPayload(payload);
+    setUser(userObj);
+    return { ...data, mfaEnabled: userObj?.mfaEnabled ?? false };
   }, []);
 
   const setupMfa = useCallback(async () => {
