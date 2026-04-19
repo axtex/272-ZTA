@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '../components/ui/index.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import DoctorDashboard from '../components/dashboard/DoctorDashboard.jsx';
@@ -64,9 +64,6 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <Link to="/mfa-setup" className={appOutlineLink}>
-              Set up 2FA
-            </Link>
             <button
               type="button"
               onClick={handleLogout}

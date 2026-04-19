@@ -59,7 +59,7 @@ export const appHeaderBar =
 export const appPanelCard =
   'rounded-ds-card border border-ds-border/90 bg-ds-surface/90 p-5 shadow-sm transition hover:border-ds-primary/40 hover:shadow-ds-card dark:border-slate-700/90 dark:bg-slate-900/90 dark:hover:border-ds-primary/30';
 
-/** Small violet-outline control (e.g. “Set up 2FA” in header). */
+/** Small violet-outline control (e.g. header actions). */
 export const appOutlineLink =
   'inline-flex items-center rounded-lg border border-violet-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-ds-primary shadow-sm transition hover:bg-violet-50 dark:border-violet-900/50 dark:bg-slate-800/80 dark:text-ds-primary-soft dark:hover:bg-violet-950/40';
 
