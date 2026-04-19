@@ -277,13 +277,6 @@ async function unlockUser(userId, adminUserId, ipAddress) {
     data: { status: 'ACTIVE' },
   });
 
-  await prisma.auditLog.deleteMany({
-    where: {
-      userId,
-      action: 'LOGIN_FAILED',
-    },
-  });
-
   await prisma.auditLog.create({
     data: {
       userId: adminUserId ?? null,

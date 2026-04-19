@@ -29,23 +29,61 @@ describe('DashboardPage', () => {
 
   it('shows doctor-specific cards when role is doctor', () => {
     vi.mocked(useAuth).mockReturnValue({
-      user: { email: 'doc@hospital.com', role: 'doctor' },
+      user: { email: 'doc@hospital.com', role: 'doctor', sub: 'doc-id' },
       logout: vi.fn().mockResolvedValue(undefined),
     });
     renderDashboard();
-    expect(screen.getByText('My Patients')).toBeInTheDocument();
-    expect(screen.getByText('EHR Quick View')).toBeInTheDocument();
-    expect(screen.getByText('Break-glass Emergency Access')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'System Overview' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'My Patients' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'EHR Records' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /break-glass access/i })).toBeInTheDocument();
   });
 
-  it('shows nurse-specific cards when role is nurse', () => {
+  it('shows doctor header with department line, Doctor badge, and logout', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        email: 'doc@hospital.com',
+        role: 'doctor',
+        firstName: 'Alex',
+        department: 'Cardiology',
+      },
+      logout: vi.fn().mockResolvedValue(undefined),
+    });
+    renderDashboard();
+    expect(screen.getByRole('heading', { name: /welcome, alex/i })).toBeInTheDocument();
+    expect(screen.getByText('Cardiology')).toBeInTheDocument();
+    expect(screen.getByText('Department:')).toBeInTheDocument();
+    expect(screen.getByText('Doctor')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
+  });
+
+  it('shows nurse-specific dashboard when role is nurse', () => {
     vi.mocked(useAuth).mockReturnValue({
       user: { email: 'nurse@hospital.com', role: 'Nurse' },
       logout: vi.fn().mockResolvedValue(undefined),
     });
     renderDashboard();
-    expect(screen.getByText('Patient Vitals')).toBeInTheDocument();
-    expect(screen.getByText('Update Vitals')).toBeInTheDocument();
+    expect(screen.getByText('System Overview')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'My Patients' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Update Vitals' })).toBeInTheDocument();
+  });
+
+  it('shows nurse header with department line, Nurse badge, and logout', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        email: 'nurse@hospital.com',
+        role: 'Nurse',
+        firstName: 'Sam',
+        department: 'ICU',
+      },
+      logout: vi.fn().mockResolvedValue(undefined),
+    });
+    renderDashboard();
+    expect(screen.getByRole('heading', { name: /welcome, sam/i })).toBeInTheDocument();
+    expect(screen.getByText('ICU')).toBeInTheDocument();
+    expect(screen.getByText('Department:')).toBeInTheDocument();
+    expect(screen.getByText('Nurse', { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
   });
 
   it('shows admin-specific cards when role is admin', () => {
@@ -54,19 +92,50 @@ describe('DashboardPage', () => {
       logout: vi.fn().mockResolvedValue(undefined),
     });
     renderDashboard();
-    expect(screen.getByText('User Management')).toBeInTheDocument();
-    expect(screen.getByText('Audit Log')).toBeInTheDocument();
-    expect(screen.getByText('Security Alerts')).toBeInTheDocument();
+    expect(screen.getAllByText('User Management').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Audit Log').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Security Alerts').length).toBeGreaterThan(0);
   });
 
   it('shows patient-specific cards when role is patient', () => {
     vi.mocked(useAuth).mockReturnValue({
-      user: { email: 'pat@hospital.com', role: 'patient' },
+      user: {
+        email: 'pat@hospital.com',
+        role: 'patient',
+        firstName: 'Jordan',
+        assignedDoctorName: null,
+        mfaEnabled: false,
+      },
       logout: vi.fn().mockResolvedValue(undefined),
     });
     renderDashboard();
-    expect(screen.getByText('My Health Records')).toBeInTheDocument();
-    expect(screen.getByText('My Documents')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /welcome,\s*jordan/i }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Assigned Doctor').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Unassigned').length).toBeGreaterThan(0);
+    expect(screen.getByText('Patient', { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
+    expect(screen.getByText('System Overview')).toBeInTheDocument();
+    expect(screen.getByText('My Health Summary')).toBeInTheDocument();
+    expect(screen.getByText('My Medical Records')).toBeInTheDocument();
+    expect(screen.getAllByText('My Documents').length).toBeGreaterThan(0);
+  });
+
+  it('shows assigned doctor name in patient overview when set', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        email: 'pat@hospital.com',
+        role: 'patient',
+        firstName: 'Sam',
+        assignedDoctorName: 'Dr. Jane Smith',
+        mfaEnabled: false,
+      },
+      logout: vi.fn().mockResolvedValue(undefined),
+    });
+    renderDashboard();
+    expect(screen.getAllByText('Dr. Jane Smith').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText('Unassigned')).not.toBeInTheDocument();
   });
 
   it('calls logout and redirects to /login when logout button clicked', async () => {

@@ -3,6 +3,22 @@ const prisma = require('../../config/prisma');
 const MAX_FAILED_LOGINS = 5;
 const FAILED_LOGIN_WINDOW_MINUTES = 15;
 
+/** Rolling window start for lockout: last N minutes, but never before latest admin unlock (preserves audit rows). */
+async function effectiveFailedLoginWindowStart(userId) {
+  const windowStart = new Date(Date.now() - FAILED_LOGIN_WINDOW_MINUTES * 60 * 1000);
+  const lastUnlock = await prisma.auditLog.findFirst({
+    where: {
+      action: 'ACCOUNT_UNLOCKED',
+      resourceId: userId,
+    },
+    orderBy: { timestamp: 'desc' },
+    select: { timestamp: true },
+  });
+  if (!lastUnlock) return windowStart;
+  const unlockMs = new Date(lastUnlock.timestamp).getTime();
+  return new Date(Math.max(windowStart.getTime(), unlockMs));
+}
+
 // ── Failed Login Tracking ─────────────────────────────────────
 async function recordFailedLogin(userId, ipAddress) {
   // Write failed login to audit log
@@ -17,13 +33,12 @@ async function recordFailedLogin(userId, ipAddress) {
     },
   });
 
-  // Count failed logins in last 15 minutes
-  const windowStart = new Date(Date.now() - FAILED_LOGIN_WINDOW_MINUTES * 60 * 1000);
+  const countFrom = await effectiveFailedLoginWindowStart(userId);
   const failedCount = await prisma.auditLog.count({
     where: {
       userId,
       action: 'LOGIN_FAILED',
-      timestamp: { gte: windowStart },
+      timestamp: { gte: countFrom },
     },
   });
 

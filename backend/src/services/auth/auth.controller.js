@@ -85,7 +85,11 @@ async function mfaVerify(req, res) {
 
 async function mfaValidate(req, res) {
   try {
-    const tokens = await validateMfaLogin(req.body.tempToken, req.body.code);
+    const deviceInfo = {
+      userAgent: req.headers['user-agent'],
+      ip: req.ip,
+    };
+    const tokens = await validateMfaLogin(req.body.tempToken, req.body.code, deviceInfo);
     return res.status(200).json(tokens);
   } catch (error) {
     return handleAuthError(res, error);

@@ -5,6 +5,26 @@ const { verifyToken, verifyRole } = require('../auth/auth.middleware');
 
 const router = express.Router();
 
+function shortDeviceLabelFromDetails(details) {
+  const ua =
+    details && typeof details === 'object' && details.userAgent != null
+      ? String(details.userAgent)
+      : '';
+  if (!ua) return '—';
+  let browser = 'Browser';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/Chrome\//.test(ua)) browser = 'Chrome';
+  else if (/Safari\//.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+  else if (/Firefox\//.test(ua)) browser = 'Firefox';
+  let os = 'Device';
+  if (/Windows NT/.test(ua)) os = 'Windows';
+  else if (/Mac OS X|Macintosh/.test(ua)) os = 'Mac';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/iPhone|iPad|iPod/.test(ua)) os = 'iOS';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  return `${browser} / ${os}`;
+}
+
 const ALLOWED_DECISIONS = new Set(['ALLOW', 'DENY', 'STEP_UP']);
 const MAX_TAKE = 200;
 
@@ -60,6 +80,27 @@ router.get('/logs', verifyToken, verifyRole('admin'), async (req, res) => {
   }));
 
   return res.status(200).json({ logs, total, take, skip });
+});
+
+router.get('/my-login-activity', verifyToken, verifyRole('patient'), async (req, res) => {
+  const userId = req.user.userId ?? req.user.sub;
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const rows = await prisma.auditLog.findMany({
+    where: { userId, action: 'LOGIN_SUCCESS' },
+    orderBy: { timestamp: 'desc' },
+    take: 50,
+  });
+  return res.status(200).json({
+    logs: rows.map((l) => ({
+      id: l.id,
+      timestamp: l.timestamp,
+      actionLabel: 'Sign in',
+      ipAddress: l.ipAddress,
+      deviceLabel: shortDeviceLabelFromDetails(l.details),
+    })),
+  });
 });
 
 module.exports = router;
