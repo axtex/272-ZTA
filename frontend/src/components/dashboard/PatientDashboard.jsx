@@ -134,7 +134,6 @@ function normalizePatientVitals(v) {
     temperature: o.temperature ?? o.temp ?? null,
     o2: o.o2Saturation ?? o.spo2 ?? o.o2 ?? null,
     respiratoryRate: o.respiratoryRate ?? o.rr ?? o.respRate ?? null,
-    pain: o.pain ?? o.painScale ?? null,
     notes: o.notes ?? o.clinicalNotes ?? null,
   };
 }
@@ -523,12 +522,6 @@ export default function PatientDashboard() {
                       {latestVitals.respiratoryRate != null ? `${latestVitals.respiratoryRate} breaths/min` : '—'}
                     </dd>
                   </div>
-                  <div className={appDataRow}>
-                    <dt className={appDataLabel}>Pain Scale</dt>
-                    <dd className={`${appDataValue} text-right`}>
-                      {latestVitals.pain != null ? `${latestVitals.pain} / 10` : '—'}
-                    </dd>
-                  </div>
                 </dl>
                 <div className={`${appMutedText} mt-4 space-y-1 text-sm`}>
                   <p>Recorded: {formatLongDate(latestRecord?.updatedAt)}</p>
@@ -603,10 +596,6 @@ export default function PatientDashboard() {
                           <div>
                             <span className={appMutedText}>RR: </span>
                             <span className={appDataValue}>{v.respiratoryRate ?? '—'}</span>
-                          </div>
-                          <div>
-                            <span className={appMutedText}>Pain: </span>
-                            <span className={appDataValue}>{v.pain != null ? `${v.pain}/10` : '—'}</span>
                           </div>
                         </div>
                       </div>

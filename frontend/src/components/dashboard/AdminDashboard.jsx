@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { Alert, Badge, Button, Card, Spinner } from '../ui/index.js';
@@ -25,6 +25,12 @@ import {
   unlockUser,
   updateUser,
 } from '../../lib/api.js';
+import { ToolbarSelectDropdown } from './ToolbarSelectDropdown.jsx';
+import {
+  actionMenuItem,
+  toolbarDropdownTriggerClass,
+  useToolbarDropdownDismiss,
+} from './toolbarDropdownPrimitives.jsx';
 
 /** Compact selects aligned with panel inputs (role filter, row actions). */
 const panelSelect = `${authInput} py-2 pr-9 text-sm leading-snug text-ds-text dark:text-slate-100`;
@@ -63,42 +69,8 @@ function statusBadge(status) {
   );
 }
 
-const actionMenuItem =
-  'flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs font-medium text-ds-text transition hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50 dark:text-slate-100 dark:hover:bg-slate-800';
 const actionMenuItemDanger = `${actionMenuItem} text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/40`;
 const actionMenuItemSuccess = `${actionMenuItem} text-emerald-800 hover:bg-emerald-50 dark:text-emerald-200 dark:hover:bg-emerald-950/35`;
-
-/** Shared with User Management role filter + per-row Actions menus. */
-const toolbarDropdownTriggerClass =
-  'inline-flex items-center gap-1 rounded-lg border border-ds-border bg-ds-surface px-2.5 py-1 text-xs font-semibold text-ds-text shadow-sm transition hover:border-ds-border-strong hover:bg-ds-surface-muted focus-visible:outline focus-visible:ring-2 focus-visible:ring-ds-primary/30 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800';
-
-const toolbarDropdownPanelClass =
-  'absolute z-50 w-max min-w-[9.5rem] max-w-[14rem] overflow-hidden rounded-md border border-ds-border/90 bg-ds-surface py-0.5 text-left shadow-lg ring-1 ring-black/5 divide-y divide-ds-border/60 dark:divide-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:ring-white/10 top-[calc(100%+0.35rem)]';
-
-function useToolbarDropdownDismiss(open, setOpen) {
-  const rootRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function handlePointerDown(event) {
-      const el = rootRef.current;
-      if (el && !el.contains(event.target)) {
-        setOpen(false);
-      }
-    }
-    function handleKeyDown(event) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open, setOpen]);
-
-  return rootRef;
-}
 
 const ROLE_FILTER_OPTIONS = [
   { value: '', label: 'All roles' },
@@ -107,85 +79,6 @@ const ROLE_FILTER_OPTIONS = [
   { value: 'Admin', label: 'Admin' },
   { value: 'Patient', label: 'Patient' },
 ];
-
-function ToolbarSelectDropdown({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  listAriaLabel = 'Options',
-  align = 'left',
-  triggerMinWidthClass = 'min-w-[9.5rem]',
-  className = '',
-  /** When set, shown on the trigger if `value` is empty and not listed in `options` (not a menu row). */
-  placeholderLabel,
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useToolbarDropdownDismiss(open, setOpen);
-  const selected = options.find((o) => o.value === value);
-  const emptyish = value === '' || value == null;
-  const selectedLabel =
-    selected?.label ??
-    (placeholderLabel != null && emptyish ? placeholderLabel : options[0]?.label ?? '—');
-  const showPlaceholderStyle = emptyish && placeholderLabel != null && !selected;
-  const panelSide = align === 'right' ? 'right-0' : 'left-0';
-
-  return (
-    <div ref={rootRef} className={['relative inline-flex shrink-0', className].filter(Boolean).join(' ')}>
-      <button
-        type="button"
-        className={`${toolbarDropdownTriggerClass} h-10 ${triggerMinWidthClass} justify-between`}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label={ariaLabel}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span
-          className={[
-            'min-w-0 flex-1 truncate text-left',
-            showPlaceholderStyle ? 'text-ds-text-muted dark:text-slate-500' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {selectedLabel}
-        </span>
-        <span
-          className={`shrink-0 ${open ? 'rotate-180' : ''} text-ds-text-muted transition-transform dark:text-slate-500`}
-          aria-hidden
-        >
-          ▾
-        </span>
-      </button>
-      {open ? (
-        <div role="listbox" aria-label={listAriaLabel} className={`${toolbarDropdownPanelClass} ${panelSide}`}>
-          {options.map((opt) => (
-            <button
-              key={opt.value === '' ? '__empty' : opt.value}
-              type="button"
-              role="option"
-              aria-selected={value === opt.value}
-              className={[
-                actionMenuItem,
-                value === opt.value
-                  ? 'bg-violet-50 font-semibold text-ds-primary dark:bg-violet-950/40 dark:text-ds-primary-soft'
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              onClick={() => {
-                onChange(opt.value);
-                setOpen(false);
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function RoleFilterDropdown({ value, onChange }) {
   return (

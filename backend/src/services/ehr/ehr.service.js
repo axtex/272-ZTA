@@ -430,6 +430,8 @@ async function listNursePatients(requestingUser) {
     return {
       patientId: p.id,
       email: p.user?.email ?? null,
+      firstName: p.user?.firstName ?? null,
+      lastName: p.user?.lastName ?? null,
       displayName,
       mrn: p.medicalRecordNumber,
       assignedDoctorName,

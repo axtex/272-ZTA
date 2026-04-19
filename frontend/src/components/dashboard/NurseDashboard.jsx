@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Alert, Badge, Button, Spinner } from '../ui/index.js';
@@ -19,6 +19,8 @@ import {
   getPatientEhr,
   updateEhrRecord,
 } from '../../lib/api.js';
+import { ToolbarSelectDropdown } from './ToolbarSelectDropdown.jsx';
+import { toolbarDropdownTriggerClass } from './toolbarDropdownPrimitives.jsx';
 
 const STAT_CARD =
   'rounded-ds-card border border-ds-border/60 bg-ds-surface/80 p-4 dark:border-slate-700/60 dark:bg-slate-800/60';
@@ -27,13 +29,23 @@ const PATIENT_TABLE_ROW =
   'grid grid-cols-[minmax(8rem,1.1fr)_minmax(5rem,0.55fr)_minmax(7rem,0.85fr)_minmax(7rem,0.75fr)_minmax(4rem,0.35fr)_minmax(9rem,0.95fr)] gap-x-3 items-center';
 
 const VITALS_HISTORY_ROW =
-  'grid grid-cols-[minmax(6.5rem,0.75fr)_repeat(5,minmax(4rem,0.55fr))_minmax(3.5rem,0.4fr)] gap-x-2 items-center';
+  'grid grid-cols-[minmax(6.5rem,0.75fr)_repeat(5,minmax(4rem,0.55fr))] gap-x-2 items-center';
 
 const MED_TABLE_ROW =
   'grid grid-cols-[minmax(7rem,1fr)_minmax(6.5rem,0.85fr)_minmax(7rem,0.9fr)_minmax(7rem,0.85fr)_minmax(5.5rem,0.55fr)_minmax(7rem,0.75fr)] gap-x-3 items-center';
 
 const ACTIVITY_TABLE_ROW =
   'grid grid-cols-[minmax(5rem,0.55fr)_minmax(7rem,0.85fr)_minmax(7rem,0.85fr)_minmax(5rem,0.45fr)] gap-x-3 items-center';
+
+/** Nurse vitals tab: tighter fields + smaller placeholder copy than `authInput` defaults. */
+const NURSE_VITALS_INPUT = [
+  authInput,
+  '!px-2.5 !py-1.5 !text-sm !leading-snug',
+  'placeholder:text-[11px] placeholder:leading-tight placeholder:text-ds-text-muted/90 dark:placeholder:text-slate-500',
+].join(' ');
+
+const NURSE_VITALS_FIELD_LABEL =
+  'flex flex-col gap-1.5 text-xs font-medium leading-snug text-ds-text-muted dark:text-slate-400';
 
 const PATIENTS_PAGE_SIZE = 8;
 const RECORDS_PAGE_SIZE = 10;
@@ -55,6 +67,46 @@ function TabButton({ id, label, active, onClick }) {
       {label}
     </button>
   );
+}
+
+const patientClearBtnClass = [
+  toolbarDropdownTriggerClass,
+  'h-10 w-10 min-h-10 min-w-10 shrink-0 justify-center gap-0 p-0 text-ds-text-muted hover:text-ds-text dark:text-slate-500 dark:hover:text-slate-200',
+].join(' ');
+
+function PatientClearButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      className={patientClearBtnClass}
+      aria-label="Clear selected patient"
+      title="Clear patient"
+      onClick={onClick}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        className="size-[15px] opacity-90"
+        aria-hidden
+      >
+        <path d="M18 6 6 18M6 6l12 12" />
+      </svg>
+    </button>
+  );
+}
+
+function nursePatientFullName(p) {
+  if (!p) return '—';
+  const fn = typeof p.firstName === 'string' ? p.firstName.trim() : '';
+  const ln = typeof p.lastName === 'string' ? p.lastName.trim() : '';
+  const fromParts = [fn, ln].filter(Boolean).join(' ');
+  if (fromParts) return fromParts;
+  const dn = typeof p.displayName === 'string' ? p.displayName.trim() : '';
+  if (dn) return dn;
+  return typeof p.email === 'string' && p.email.trim() ? p.email.trim() : '—';
 }
 
 function formatDateTime(value) {
@@ -184,8 +236,6 @@ function mergeVitalsPayload(existing, form) {
     const n = Number(x);
     return Number.isFinite(n) ? n : undefined;
   };
-  const painScale =
-    typeof form.painScale === 'number' && Number.isFinite(form.painScale) ? form.painScale : num(form.painScale);
   const next = {
     ...base,
     bloodPressureSystolic: num(form.bloodPressureSystolic),
@@ -194,8 +244,8 @@ function mergeVitalsPayload(existing, form) {
     temperatureF: num(form.temperatureF),
     o2Saturation: num(form.o2Saturation),
     respiratoryRate: num(form.respiratoryRate),
-    ...(painScale === undefined ? {} : { painScale }),
   };
+  delete next.painScale;
   if (form.notes != null && String(form.notes).trim()) {
     next.notes = String(form.notes).trim();
   } else {
@@ -215,21 +265,15 @@ function emptyVitalsForm() {
     temperatureF: '',
     o2Saturation: '',
     respiratoryRate: '',
-    painScale: 0,
     notes: '',
   };
 }
 
-function initialVitalsFormFromRecord(record) {
-  const v = readVitals(record?.vitals);
-  const ps = v.painScale != null && v.painScale !== '' ? Number(v.painScale) : 0;
-  return {
-    ...emptyVitalsForm(),
-    painScale: Number.isFinite(ps) ? ps : 0,
-  };
+function initialVitalsFormFromRecord() {
+  return emptyVitalsForm();
 }
 
-function NurseVitalsFormPanel({ latestRecord, selectedPatient, selectedPatientId, nowTick }) {
+function NurseVitalsFormPanel({ latestRecord, selectedPatient, selectedPatientId }) {
   const queryClient = useQueryClient();
   const latestVitals = readVitals(latestRecord?.vitals);
   const placeholders = useMemo(
@@ -246,18 +290,18 @@ function NurseVitalsFormPanel({ latestRecord, selectedPatient, selectedPatientId
     [latestVitals],
   );
 
-  const [vitalsForm, setVitalsForm] = useState(() => initialVitalsFormFromRecord(latestRecord));
+  const [vitalsForm, setVitalsForm] = useState(() => initialVitalsFormFromRecord());
   const [vitalsNotice, setVitalsNotice] = useState({ variant: '', message: '' });
 
   const vitalsMutation = useMutation({
     mutationFn: ({ ehrId, vitals }) => updateEhrRecord(ehrId, { vitals }),
     onSuccess: (record) => {
-      const email = selectedPatient?.email ?? selectedPatientId;
+      const who = nursePatientFullName(selectedPatient);
       setVitalsNotice({
         variant: 'success',
-        message: `Vitals recorded for ${email} at ${new Date().toLocaleString()}`,
+        message: `Vitals recorded for ${who} at ${new Date().toLocaleString()}`,
       });
-      setVitalsForm(initialVitalsFormFromRecord(record));
+      setVitalsForm(initialVitalsFormFromRecord());
       queryClient.invalidateQueries({ queryKey: ['nurseDashboardSummary'] });
       queryClient.invalidateQueries({ queryKey: ['nursePatients'] });
       queryClient.invalidateQueries({ queryKey: ['nursePatientEhr', selectedPatientId] });
@@ -287,95 +331,86 @@ function NurseVitalsFormPanel({ latestRecord, selectedPatient, selectedPatientId
 
   return (
     <div className="mt-4 space-y-4">
-      <p className={`${appMutedText} text-sm`}>
-        Recording vitals for{' '}
-        <span className="font-medium text-ds-text dark:text-slate-200">{selectedPatient?.email ?? '—'}</span>
-      </p>
-      <p className={`${appMutedText} text-xs`}>
-        Will be saved at{' '}
-        <span className="text-ds-text dark:text-slate-200">{new Date(nowTick).toLocaleString()}</span>
-      </p>
+      <div>
+        <h3 className="text-sm font-semibold text-ds-text dark:text-white">Patient Details</h3>
+        <div className="mt-2 rounded-ds-card border border-ds-border/70 bg-ds-surface-muted/40 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900/50">
+          <span className="font-medium text-ds-text dark:text-slate-100">{nursePatientFullName(selectedPatient)}</span>
+          <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+          <span className="font-mono text-xs text-ds-text dark:text-slate-200">{selectedPatient?.mrn ?? '—'}</span>
+          <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+          <span className="text-ds-text dark:text-slate-200">{selectedPatient?.assignedDoctorName ?? 'Unassigned'}</span>
+          <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+          <span className="font-medium text-ds-text-muted dark:text-slate-400">Diagnosis — Restricted</span>
+        </div>
+      </div>
 
-      <form className="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={handleRecordVitals}>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+      <form className="grid max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-x-3 sm:gap-y-2.5" onSubmit={handleRecordVitals}>
+        <label className={NURSE_VITALS_FIELD_LABEL}>
           Blood Pressure Systolic (mmHg)
           <input
-            className={authInput}
+            className={NURSE_VITALS_INPUT}
             inputMode="decimal"
             value={vitalsForm.bloodPressureSystolic}
             onChange={(e) => setVitalsForm((f) => ({ ...f, bloodPressureSystolic: e.target.value }))}
             placeholder={placeholders.bloodPressureSystolic || '145'}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+        <label className={NURSE_VITALS_FIELD_LABEL}>
           Blood Pressure Diastolic (mmHg)
           <input
-            className={authInput}
+            className={NURSE_VITALS_INPUT}
             inputMode="decimal"
             value={vitalsForm.bloodPressureDiastolic}
             onChange={(e) => setVitalsForm((f) => ({ ...f, bloodPressureDiastolic: e.target.value }))}
             placeholder={placeholders.bloodPressureDiastolic || '92'}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+        <label className={NURSE_VITALS_FIELD_LABEL}>
           Heart Rate (bpm)
           <input
-            className={authInput}
+            className={NURSE_VITALS_INPUT}
             inputMode="numeric"
             value={vitalsForm.heartRate}
             onChange={(e) => setVitalsForm((f) => ({ ...f, heartRate: e.target.value }))}
             placeholder={placeholders.heartRate || '88'}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+        <label className={NURSE_VITALS_FIELD_LABEL}>
           Temperature (°F)
           <input
-            className={authInput}
+            className={NURSE_VITALS_INPUT}
             inputMode="decimal"
             value={vitalsForm.temperatureF}
             onChange={(e) => setVitalsForm((f) => ({ ...f, temperatureF: e.target.value }))}
             placeholder={placeholders.temperatureF || '98.6'}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+        <label className={NURSE_VITALS_FIELD_LABEL}>
           O₂ Saturation (%)
           <input
-            className={authInput}
+            className={NURSE_VITALS_INPUT}
             inputMode="numeric"
             value={vitalsForm.o2Saturation}
             onChange={(e) => setVitalsForm((f) => ({ ...f, o2Saturation: e.target.value }))}
             placeholder={placeholders.o2Saturation || '97'}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+        <label className={NURSE_VITALS_FIELD_LABEL}>
           Respiratory Rate (breaths/min)
           <input
-            className={authInput}
+            className={NURSE_VITALS_INPUT}
             inputMode="numeric"
             value={vitalsForm.respiratoryRate}
             onChange={(e) => setVitalsForm((f) => ({ ...f, respiratoryRate: e.target.value }))}
             placeholder={placeholders.respiratoryRate || '16'}
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400 sm:col-span-2">
-          Pain Scale (0–10): {vitalsForm.painScale}
-          <input
-            type="range"
-            min={0}
-            max={10}
-            step={1}
-            className="w-full accent-ds-primary"
-            value={vitalsForm.painScale}
-            onChange={(e) => setVitalsForm((f) => ({ ...f, painScale: Number(e.target.value) }))}
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400 sm:col-span-2">
-          Nursing notes
+        <label className={`${NURSE_VITALS_FIELD_LABEL} sm:col-span-2`}>
+          Notes
           <textarea
-            className={`${authInput} min-h-[100px]`}
+            className={`${NURSE_VITALS_INPUT} min-h-[76px]`}
             value={vitalsForm.notes}
             onChange={(e) => setVitalsForm((f) => ({ ...f, notes: e.target.value }))}
-            placeholder="Patient alert and oriented. No distress noted."
           />
         </label>
 
@@ -386,7 +421,12 @@ function NurseVitalsFormPanel({ latestRecord, selectedPatient, selectedPatientId
         ) : null}
 
         <div className="sm:col-span-2">
-          <Button type="submit" variant="primary" loading={vitalsMutation.isPending}>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={vitalsMutation.isPending}
+            className="!h-7 !min-h-[1.75rem] !rounded-md !px-3 !py-0 !text-xs font-semibold w-fit"
+          >
             Record Vitals
           </Button>
         </div>
@@ -397,18 +437,14 @@ function NurseVitalsFormPanel({ latestRecord, selectedPatient, selectedPatientId
 
 export default function NurseDashboard() {
   const [activeTab, setActiveTab] = useState('patients');
-  const [selectedPatientId, setSelectedPatientId] = useState('');
+  const [vitalsPatientId, setVitalsPatientId] = useState('');
+  const [recordsPatientId, setRecordsPatientId] = useState('');
+  const [medsPatientId, setMedsPatientId] = useState('');
   const [patientsPage, setPatientsPage] = useState(1);
   const [recordsPage, setRecordsPage] = useState(1);
   const [activityPage, setActivityPage] = useState(1);
-  const [nowTick, setNowTick] = useState(() => Date.now());
   const [medNotice, setMedNotice] = useState({ variant: '', message: '' });
   const [medAdministeredAt, setMedAdministeredAt] = useState({});
-
-  useEffect(() => {
-    const id = setInterval(() => setNowTick(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
 
   const summaryQuery = useQuery({
     queryKey: ['nurseDashboardSummary'],
@@ -425,10 +461,17 @@ export default function NurseDashboard() {
     return Array.isArray(raw) ? raw : [];
   }, [patientsQuery.data]);
 
+  const ehrPatientId = useMemo(() => {
+    if (activeTab === 'vitals') return vitalsPatientId;
+    if (activeTab === 'records') return recordsPatientId;
+    if (activeTab === 'meds') return medsPatientId;
+    return '';
+  }, [activeTab, vitalsPatientId, recordsPatientId, medsPatientId]);
+
   const ehrQuery = useQuery({
-    queryKey: ['nursePatientEhr', selectedPatientId],
-    queryFn: () => getPatientEhr(selectedPatientId),
-    enabled: Boolean(selectedPatientId),
+    queryKey: ['nursePatientEhr', ehrPatientId],
+    queryFn: () => getPatientEhr(ehrPatientId),
+    enabled: Boolean(ehrPatientId),
   });
 
   const records = useMemo(() => {
@@ -453,15 +496,20 @@ export default function NurseDashboard() {
   const activityTotalPages = Math.max(1, Math.ceil(activityTotal / ACTIVITY_PAGE_SIZE));
 
   const selectedPatient = useMemo(
-    () => patients.find((p) => p.patientId === selectedPatientId) || null,
-    [patients, selectedPatientId],
+    () => patients.find((p) => p.patientId === ehrPatientId) || null,
+    [patients, ehrPatientId],
   );
 
   const patientSelectOptions = useMemo(() => {
-    return patients.map((p) => ({
-      value: p.patientId,
-      label: p.displayName ? `${p.displayName} (${p.email ?? p.patientId})` : (p.email ?? p.patientId),
-    }));
+    return patients.map((p) => {
+      const full = nursePatientFullName(p);
+      const name = full === '—' ? 'Patient' : full;
+      const mrn = p.mrn != null && String(p.mrn).trim() ? String(p.mrn).trim() : '—';
+      return {
+        value: p.patientId,
+        label: `${name} (${mrn})`,
+      };
+    });
   }, [patients]);
 
   const patientsTotalPages = Math.max(1, Math.ceil(patients.length / PATIENTS_PAGE_SIZE));
@@ -478,14 +526,31 @@ export default function NurseDashboard() {
     return records.slice(start, start + RECORDS_PAGE_SIZE);
   }, [records, recordsPageSafe]);
 
+  const handleTabChange = useCallback(
+    (next) => {
+      if (next !== activeTab) {
+        setVitalsPatientId('');
+        setRecordsPatientId('');
+        setMedsPatientId('');
+        setRecordsPage(1);
+      }
+      setActiveTab(next);
+    },
+    [activeTab],
+  );
+
   const goVitalsForPatient = useCallback((patientId) => {
-    setSelectedPatientId(patientId);
+    setRecordsPatientId('');
+    setMedsPatientId('');
+    setVitalsPatientId(patientId);
     setRecordsPage(1);
     setActiveTab('vitals');
   }, []);
 
   const goRecordsForPatient = useCallback((patientId) => {
-    setSelectedPatientId(patientId);
+    setVitalsPatientId('');
+    setMedsPatientId('');
+    setRecordsPatientId(patientId);
     setRecordsPage(1);
     setActiveTab('records');
   }, []);
@@ -543,31 +608,31 @@ export default function NurseDashboard() {
           id="nurse-tab-patients"
           label="My Patients"
           active={activeTab === 'patients'}
-          onClick={() => setActiveTab('patients')}
+          onClick={() => handleTabChange('patients')}
         />
         <TabButton
           id="nurse-tab-vitals"
           label="Update Vitals"
           active={activeTab === 'vitals'}
-          onClick={() => setActiveTab('vitals')}
+          onClick={() => handleTabChange('vitals')}
         />
         <TabButton
           id="nurse-tab-records"
           label="Patient Records"
           active={activeTab === 'records'}
-          onClick={() => setActiveTab('records')}
+          onClick={() => handleTabChange('records')}
         />
         <TabButton
           id="nurse-tab-meds"
           label="Medication Administration"
           active={activeTab === 'meds'}
-          onClick={() => setActiveTab('meds')}
+          onClick={() => handleTabChange('meds')}
         />
         <TabButton
           id="nurse-tab-activity"
           label="My Activity Log"
           active={activeTab === 'activity'}
-          onClick={() => setActiveTab('activity')}
+          onClick={() => handleTabChange('activity')}
         />
       </div>
 
@@ -683,50 +748,55 @@ export default function NurseDashboard() {
       {activeTab === 'vitals' ? (
         <section className={appPanelCard}>
           <h2 className={appSectionHeading}>Update Vitals</h2>
-          <p className={`${appMutedText} mt-1 text-sm`}>
-            Select a patient, review the last recorded values as placeholders, then record new vitals.
-          </p>
 
-          <label className="mt-4 flex max-w-xl flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
-            Patient
-            <select
-              className={`${authInput} h-10 py-2 text-sm`}
-              value={selectedPatientId}
-              onChange={(e) => {
-                setSelectedPatientId(e.target.value);
-                setRecordsPage(1);
-              }}
-              aria-label="Select patient for vitals"
-            >
-              <option value="">Select a patient…</option>
-              {patientSelectOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {!selectedPatientId ? (
-            <p className={`${appMutedText} mt-4`}>Choose a patient to continue.</p>
-          ) : ehrQuery.isLoading ? (
-            <div className="mt-4 flex items-center gap-2">
-              <Spinner size="sm" />
-              <span className={appMutedText}>Loading EHR…</span>
+          <div className="mt-4 flex min-w-0 max-w-xl flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+            <span>Patient</span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <ToolbarSelectDropdown
+                  value={vitalsPatientId}
+                  onChange={(v) => {
+                    setVitalsPatientId(v);
+                    setRecordsPage(1);
+                  }}
+                  options={patientSelectOptions}
+                  ariaLabel="Select patient for vitals"
+                  listAriaLabel="Patients"
+                  placeholderLabel="Select a patient…"
+                  className="w-full min-w-0"
+                  triggerMinWidthClass="w-full min-w-0"
+                />
+              </div>
+              {vitalsPatientId ? (
+                <PatientClearButton
+                  onClick={() => {
+                    setVitalsPatientId('');
+                    setRecordsPage(1);
+                  }}
+                />
+              ) : null}
             </div>
-          ) : ehrQuery.isError ? (
-            <Alert variant="error" className="mt-4">
-              {ehrQuery.error?.response?.data?.error || ehrQuery.error?.message || 'Failed to load records.'}
-            </Alert>
-          ) : (
-            <NurseVitalsFormPanel
-              key={`${selectedPatientId}-${latestRecord?.id ?? 'none'}-${String(latestRecord?.updatedAt ?? '')}`}
-              latestRecord={latestRecord}
-              selectedPatient={selectedPatient}
-              selectedPatientId={selectedPatientId}
-              nowTick={nowTick}
-            />
-          )}
+          </div>
+
+          {vitalsPatientId ? (
+            ehrQuery.isLoading ? (
+              <div className="mt-4 flex items-center gap-2">
+                <Spinner size="sm" />
+                <span className={appMutedText}>Loading EHR…</span>
+              </div>
+            ) : ehrQuery.isError ? (
+              <Alert variant="error" className="mt-4">
+                {ehrQuery.error?.response?.data?.error || ehrQuery.error?.message || 'Failed to load records.'}
+              </Alert>
+            ) : (
+              <NurseVitalsFormPanel
+                key={`${vitalsPatientId}-${latestRecord?.id ?? 'none'}-${String(latestRecord?.updatedAt ?? '')}`}
+                latestRecord={latestRecord}
+                selectedPatient={selectedPatient}
+                selectedPatientId={vitalsPatientId}
+              />
+            )
+          ) : null}
         </section>
       ) : null}
 
@@ -734,52 +804,57 @@ export default function NurseDashboard() {
         <section className={appPanelCard}>
           <h2 className={appSectionHeading}>Patient Records</h2>
 
-          <label className="mt-4 flex max-w-xl flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
-            Patient
-            <select
-              className={`${authInput} h-10 py-2 text-sm`}
-              value={selectedPatientId}
-              onChange={(e) => {
-                setSelectedPatientId(e.target.value);
-                setRecordsPage(1);
-              }}
-              aria-label="Select patient for records"
-            >
-              <option value="">Select a patient…</option>
-              {patientSelectOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {!selectedPatientId ? (
-            <p className={`${appMutedText} mt-4`}>Select a patient to view records.</p>
-          ) : ehrQuery.isLoading ? (
-            <div className="mt-4 flex items-center gap-2">
-              <Spinner size="sm" />
-              <span className={appMutedText}>Loading records…</span>
-            </div>
-          ) : ehrQuery.isError ? (
-            <Alert variant="error" className="mt-4">
-              {ehrQuery.error?.response?.data?.error || ehrQuery.error?.message || 'Failed to load records.'}
-            </Alert>
-          ) : (
-            <div className="mt-6 space-y-6">
-              <div className="rounded-ds-card border border-ds-border/70 bg-ds-surface-muted/40 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900/50">
-                <span className="font-medium text-ds-text dark:text-slate-100">{selectedPatient?.email ?? '—'}</span>
-                <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
-                <span className="font-mono text-xs text-ds-text dark:text-slate-200">{selectedPatient?.mrn ?? '—'}</span>
-                <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
-                <span className="text-ds-text dark:text-slate-200">{selectedPatient?.assignedDoctorName ?? 'Unassigned'}</span>
+          <div className="mt-4 flex min-w-0 max-w-xl flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+            <span>Patient</span>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <ToolbarSelectDropdown
+                  value={recordsPatientId}
+                  onChange={(v) => {
+                    setRecordsPatientId(v);
+                    setRecordsPage(1);
+                  }}
+                  options={patientSelectOptions}
+                  ariaLabel="Select patient for records"
+                  listAriaLabel="Patients"
+                  placeholderLabel="Select a patient…"
+                  className="w-full min-w-0"
+                  triggerMinWidthClass="w-full min-w-0"
+                />
               </div>
+              {recordsPatientId ? (
+                <PatientClearButton
+                  onClick={() => {
+                    setRecordsPatientId('');
+                    setRecordsPage(1);
+                  }}
+                />
+              ) : null}
+            </div>
+          </div>
 
+          {recordsPatientId ? (
+            ehrQuery.isLoading ? (
+              <div className="mt-4 flex items-center gap-2">
+                <Spinner size="sm" />
+                <span className={appMutedText}>Loading records…</span>
+              </div>
+            ) : ehrQuery.isError ? (
+              <Alert variant="error" className="mt-4">
+                {ehrQuery.error?.response?.data?.error || ehrQuery.error?.message || 'Failed to load records.'}
+              </Alert>
+            ) : (
+              <div className="mt-6 space-y-6">
               <div>
-                <h3 className="text-sm font-semibold text-ds-text dark:text-white">Diagnosis</h3>
-                <div className="mt-2 rounded-ds-card border border-dashed border-ds-border/80 bg-ds-surface-muted/30 px-4 py-4 dark:border-slate-600 dark:bg-slate-900/40">
-                  <p className="text-sm font-medium text-ds-text-muted dark:text-slate-400">Diagnosis — Restricted</p>
-                  <p className={`${appMutedText} mt-1 text-xs`}>Diagnosis is only visible to doctors.</p>
+                <h3 className="text-sm font-semibold text-ds-text dark:text-white">Patient Details</h3>
+                <div className="mt-2 rounded-ds-card border border-ds-border/70 bg-ds-surface-muted/40 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900/50">
+                  <span className="font-medium text-ds-text dark:text-slate-100">{nursePatientFullName(selectedPatient)}</span>
+                  <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+                  <span className="font-mono text-xs text-ds-text dark:text-slate-200">{selectedPatient?.mrn ?? '—'}</span>
+                  <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+                  <span className="text-ds-text dark:text-slate-200">{selectedPatient?.assignedDoctorName ?? 'Unassigned'}</span>
+                  <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+                  <span className="font-medium text-ds-text-muted dark:text-slate-400">Diagnosis — Restricted</span>
                 </div>
               </div>
 
@@ -790,7 +865,7 @@ export default function NurseDashboard() {
                 ) : (
                   <>
                     <div className="mt-3 overflow-x-auto">
-                      <div className="min-w-[880px]">
+                      <div className="min-w-[760px]">
                         <div className={`${VITALS_HISTORY_ROW} border-b border-ds-border/70 pb-2 dark:border-slate-600`}>
                           <div className={appDataLabel}>Date / time</div>
                           <div className={appDataLabel}>BP</div>
@@ -798,7 +873,6 @@ export default function NurseDashboard() {
                           <div className={appDataLabel}>Temp °F</div>
                           <div className={appDataLabel}>O₂</div>
                           <div className={appDataLabel}>RR</div>
-                          <div className={appDataLabel}>Pain</div>
                         </div>
                         <div className="divide-y divide-ds-border/60 dark:divide-slate-700/60">
                           {recordsSlice.map((r) => (
@@ -809,7 +883,6 @@ export default function NurseDashboard() {
                               <div className={appDataValue}>{formatNum(r.vitals, 'temperatureF')}</div>
                               <div className={appDataValue}>{formatNum(r.vitals, 'o2Saturation')}</div>
                               <div className={appDataValue}>{formatNum(r.vitals, 'respiratoryRate')}</div>
-                              <div className={appDataValue}>{formatNum(r.vitals, 'painScale')}</div>
                             </div>
                           ))}
                         </div>
@@ -844,7 +917,8 @@ export default function NurseDashboard() {
                 )}
               </div>
             </div>
-          )}
+            )
+          ) : null}
         </section>
       ) : null}
 
@@ -852,24 +926,20 @@ export default function NurseDashboard() {
         <section className={appPanelCard}>
           <h2 className={appSectionHeading}>Medication Administration</h2>
 
-          <label className="mt-4 flex max-w-xl flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+          <label className="mt-4 flex min-w-0 max-w-xl flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
             Patient
-            <select
-              className={`${authInput} h-10 py-2 text-sm`}
-              value={selectedPatientId}
-              onChange={(e) => {
-                setSelectedPatientId(e.target.value);
-                setRecordsPage(1);
+            <ToolbarSelectDropdown
+              value={medsPatientId}
+              onChange={(v) => {
+                setMedsPatientId(v);
               }}
-              aria-label="Select patient for medications"
-            >
-              <option value="">Select a patient…</option>
-              {patientSelectOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+              options={patientSelectOptions}
+              ariaLabel="Select patient for medications"
+              listAriaLabel="Patients"
+              placeholderLabel="Select a patient…"
+              className="w-full min-w-0"
+              triggerMinWidthClass="w-full min-w-0"
+            />
           </label>
 
           {medNotice.message ? (
@@ -878,12 +948,10 @@ export default function NurseDashboard() {
             </Alert>
           ) : null}
 
-          {!selectedPatientId ? (
-            <p className={`${appMutedText} mt-4`}>Select a patient to view medications.</p>
-          ) : (
+          {medsPatientId ? (
             <div className="mt-6">
               {(() => {
-                const meds = demoMedications(selectedPatientId);
+                const meds = demoMedications(medsPatientId);
                 if (!meds.length) {
                   return <p className={appMutedText}>No medications currently prescribed for this patient.</p>;
                 }
@@ -900,7 +968,7 @@ export default function NurseDashboard() {
                       </div>
                       <div className="divide-y divide-ds-border/60 dark:divide-slate-700/60">
                         {meds.map((m) => {
-                          const key = `${selectedPatientId}-${m.id}`;
+                          const key = `${medsPatientId}-${m.id}`;
                           const administeredAt = medAdministeredAt[key];
                           const status = administeredAt ? 'Administered' : m.initialStatus;
                           const lastText = administeredAt ? formatDateTime(administeredAt) : 'Not yet today';
@@ -915,7 +983,7 @@ export default function NurseDashboard() {
                                 <Button
                                   type="button"
                                   variant="secondary"
-                                  className="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
+                                  className="!h-7 !min-h-0 !rounded-md !px-1.5 !py-0 !text-xs !leading-tight"
                                   disabled={Boolean(administeredAt)}
                                   onClick={() => {
                                     const ts = new Date().toISOString();
@@ -935,7 +1003,7 @@ export default function NurseDashboard() {
                 );
               })()}
             </div>
-          )}
+          ) : null}
         </section>
       ) : null}
 
