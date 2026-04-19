@@ -354,6 +354,44 @@ describe('PATCH /api/v2/ehr/:id', () => {
   });
 });
 
+describe('GET /api/v2/patient/ehr (patient self)', () => {
+  it('patient: 200 with own records', async () => {
+    const res = await request(app)
+      .get('/api/v2/patient/ehr')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.records)).toBe(true);
+  });
+
+  it('doctor: 403', async () => {
+    const res = await request(app)
+      .get('/api/v2/patient/ehr')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('GET /api/v2/patient/profile', () => {
+  it('patient: 200', async () => {
+    const res = await request(app)
+      .get('/api/v2/patient/profile')
+      .set('Authorization', `Bearer ${patientToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(200);
+    expect(res.body.medicalRecordNumber).toBeDefined();
+  });
+
+  it('doctor: 403', async () => {
+    const res = await request(app)
+      .get('/api/v2/patient/profile')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('GET /api/v2/patients/:patientId/ehr', () => {
   it('assigned doctor: 200', async () => {
     const res = await request(app)
@@ -430,11 +468,55 @@ describe('POST /api/v2/patients/:patientId/break-glass', () => {
   });
 });
 
-describe('File operations', () => {
-  const hasAws = !!process.env.AWS_ACCESS_KEY_ID;
+describe('Nurse dashboard aggregates', () => {
+  it('GET /api/v2/nurse/patients — nurse 200', async () => {
+    const res = await request(app)
+      .get('/api/v2/nurse/patients')
+      .set('Authorization', `Bearer ${nurseToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.patients)).toBe(true);
+    expect(res.body.patients.length).toBeGreaterThanOrEqual(1);
+  });
 
-  (hasAws ? describe : describe.skip)('S3-backed file ops', () => {
-    it('doctor upload: 200 { s3Key }', async () => {
+  it('GET /api/v2/nurse/patients — doctor 403', async () => {
+    const res = await request(app)
+      .get('/api/v2/nurse/patients')
+      .set('Authorization', `Bearer ${doctorToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/v2/nurse/summary — nurse 200 shape', async () => {
+    const res = await request(app)
+      .get('/api/v2/nurse/summary')
+      .set('Authorization', `Bearer ${nurseToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(200);
+    expect(typeof res.body.myPatients).toBe('number');
+    expect(typeof res.body.vitalsUpdatedToday).toBe('number');
+    expect(typeof res.body.pendingVitals).toBe('number');
+    expect(res.body.lastActivityAt === null || typeof res.body.lastActivityAt === 'string').toBe(true);
+  });
+
+  it('GET /api/v2/nurse/access-log — nurse 200', async () => {
+    const res = await request(app)
+      .get('/api/v2/nurse/access-log')
+      .set('Authorization', `Bearer ${nurseToken}`)
+      .set('User-Agent', UA);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.logs)).toBe(true);
+    expect(typeof res.body.total).toBe('number');
+  });
+});
+
+describe('File operations', () => {
+  const hasSupabaseStorage = Boolean(
+    process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
+
+  (hasSupabaseStorage ? describe : describe.skip)('Supabase-backed file ops', () => {
+    it('doctor upload: 200 { fileKey }', async () => {
       const content = Buffer.from('hello world').toString('base64');
       const res = await request(app)
         .post(`/api/v2/ehr/${ehr.id}/files`)
@@ -446,7 +528,7 @@ describe('File operations', () => {
           contentBase64: content,
         });
       expect(res.status).toBe(200);
-      expect(res.body.s3Key).toBeDefined();
+      expect(res.body.fileKey).toBeDefined();
     });
 
     it('GET presigned URL: 200 with a URL string', async () => {
