@@ -6,6 +6,24 @@ const QRCode = require('qrcode');
 const prisma = require('../../config/prisma');
 const { recordFailedLogin } = require('../anomaly/anomaly.service');
 
+async function writeLoginSuccessAudit(userId, deviceInfo) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'LOGIN_SUCCESS',
+        resourceId: null,
+        decision: 'ALLOW',
+        trustScore: null,
+        ipAddress: deviceInfo?.ip ? String(deviceInfo.ip).slice(0, 100) : null,
+        details: { userAgent: deviceInfo?.userAgent ?? null },
+      },
+    });
+  } catch (err) {
+    console.error('[AuditLog] LOGIN_SUCCESS failed:', err.message);
+  }
+}
+
 function getJwtSecret() {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -30,10 +48,32 @@ function trimOptionalName(value) {
   return t.length ? t : undefined;
 }
 
+function formatAssignedDoctorNameForToken(doctor) {
+  if (!doctor) return null;
+  const fn = typeof doctor.firstName === 'string' ? doctor.firstName.trim() : '';
+  const ln = typeof doctor.lastName === 'string' ? doctor.lastName.trim() : '';
+  const full = [fn, ln].filter(Boolean).join(' ');
+  if (full) return `Dr. ${full}`;
+  const email = typeof doctor.email === 'string' ? doctor.email.trim() : '';
+  return email.length ? email : null;
+}
+
 async function issueTokens(userId, role) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, firstName: true, mfaEnabled: true },
+    select: {
+      email: true,
+      firstName: true,
+      mfaEnabled: true,
+      department: true,
+      patientProfile: {
+        select: {
+          assignedDoctor: {
+            select: { email: true, firstName: true, lastName: true },
+          },
+        },
+      },
+    },
   });
   if (!user) {
     throw new Error('User not found');
@@ -42,6 +82,11 @@ async function issueTokens(userId, role) {
   const roleValue = resolveRoleForToken(role);
   const roleClaim =
     typeof roleValue === 'string' ? roleValue.toLowerCase() : String(roleValue);
+  const assignedDoctorName =
+    roleClaim === 'patient'
+      ? formatAssignedDoctorNameForToken(user.patientProfile?.assignedDoctor)
+      : undefined;
+
   const accessToken = jwt.sign(
     {
       userId,
@@ -49,7 +94,9 @@ async function issueTokens(userId, role) {
       role: roleClaim,
       email: user.email,
       firstName: user.firstName || null,
+      department: user.department || null,
       mfaEnabled: user.mfaEnabled ?? false,
+      ...(roleClaim === 'patient' ? { assignedDoctorName } : {}),
     },
     getJwtSecret(),
     { expiresIn: '15m' },
@@ -314,30 +361,52 @@ async function loginUser(email, password, deviceInfo) {
   });
 
   const tokens = await issueTokens(user.id, user.role);
+  await writeLoginSuccessAudit(user.id, deviceInfo);
   return { mfaRequired: false, ...tokens };
 }
 
 async function setupMfa(userId) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
+    select: { id: true, email: true, mfaEnabled: true, mfaSecret: true },
   });
   if (!user) {
     throw new Error('User not found');
   }
 
-  const secret = speakeasy.generateSecret({
-    name: `HospitalZT (${user.email})`,
-    length: 20,
+  if (user.mfaEnabled) {
+    const err = new Error('Two-factor authentication is already enabled');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  /**
+   * Reuse an existing pending secret when present so repeated setup calls (e.g. React Strict Mode
+   * double-mounting the MFA setup page) do not rotate the secret out from under the QR shown to the user.
+   */
+  let secretBase32 = user.mfaSecret;
+  if (!secretBase32) {
+    const secret = speakeasy.generateSecret({
+      name: `HospitalZT (${user.email})`,
+      length: 20,
+    });
+    secretBase32 = secret.base32;
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mfaSecret: secretBase32 },
+    });
+  }
+
+  const label = `HospitalZT (${user.email})`;
+  const otpauth_url = speakeasy.otpauthURL({
+    secret: secretBase32,
+    label,
+    encoding: 'base32',
+    issuer: 'HospitalZT',
   });
+  const qrCode = await QRCode.toDataURL(otpauth_url);
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { mfaSecret: secret.base32 },
-  });
-
-  const qrCode = await QRCode.toDataURL(secret.otpauth_url);
-
-  return { secret: secret.base32, qrCode };
+  return { secret: secretBase32, qrCode };
 }
 
 async function verifyMfaSetup(userId, code) {
@@ -348,11 +417,17 @@ async function verifyMfaSetup(userId, code) {
     throw new Error('User not found');
   }
 
+  if (!user.mfaSecret) {
+    const err = new Error('MFA setup was not started. Reload the page and scan the new QR code.');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const ok = speakeasy.totp.verify({
     secret: user.mfaSecret,
     encoding: 'base32',
     token: code,
-    window: 1,
+    window: 2,
   });
   if (!ok) {
     throw new Error('Invalid MFA code');
@@ -366,7 +441,7 @@ async function verifyMfaSetup(userId, code) {
   return { success: true };
 }
 
-async function validateMfaLogin(tempToken, code) {
+async function validateMfaLogin(tempToken, code, deviceInfo = {}) {
   const payload = jwt.verify(tempToken, getJwtSecret());
   if (payload.purpose !== 'mfa') {
     throw new Error('Invalid token');
@@ -380,17 +455,44 @@ async function validateMfaLogin(tempToken, code) {
     throw new Error('User not found');
   }
 
+  if (user.status === 'SUSPENDED') {
+    throw Object.assign(
+      new Error('Account locked: Too many failed login attempts. Contact your administrator to unlock.'),
+      { statusCode: 403 },
+    );
+  }
+
+  if (user.status === 'DISABLED') {
+    throw Object.assign(new Error('Account is disabled. Contact admin.'), { statusCode: 403 });
+  }
+
   const ok = speakeasy.totp.verify({
     secret: user.mfaSecret,
     encoding: 'base32',
     token: code,
-    window: 1,
+    window: 2,
   });
   if (!ok) {
+    const { locked } = await recordFailedLogin(user.id, deviceInfo?.ip ?? null);
+    if (locked) {
+      throw Object.assign(
+        new Error('Account locked: Too many failed login attempts. Contact your administrator to unlock.'),
+        { statusCode: 403 },
+      );
+    }
     throw new Error('Invalid MFA code');
   }
 
-  return issueTokens(user.id, user.role);
+  await prisma.auditLog.deleteMany({
+    where: {
+      userId: user.id,
+      action: 'LOGIN_FAILED',
+    },
+  });
+
+  const tokens = await issueTokens(user.id, user.role);
+  await writeLoginSuccessAudit(user.id, deviceInfo);
+  return tokens;
 }
 
 async function refreshTokens(refreshToken) {

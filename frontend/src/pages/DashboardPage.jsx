@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '../components/ui/index.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import DoctorDashboard from '../components/dashboard/DoctorDashboard.jsx';
@@ -7,6 +7,7 @@ import AdminDashboard from '../components/dashboard/AdminDashboard.jsx';
 import PatientDashboard from '../components/dashboard/PatientDashboard.jsx';
 import {
   appHeaderBar,
+  appMutedText,
   appOutlineLink,
   appPageBg,
   appPanelCard,
@@ -41,6 +42,24 @@ function welcomeFirstName(user) {
   return token.charAt(0).toUpperCase() + token.slice(1).toLowerCase();
 }
 
+function formatDepartmentName(department) {
+  if (department == null) return '—';
+  const s = String(department).trim();
+  return s || '—';
+}
+
+function roleBadgeLabel(roleKey, rawRole) {
+  const map = {
+    doctor: 'Doctor',
+    nurse: 'Nurse',
+    patient: 'Patient',
+    admin: 'Admin',
+  };
+  if (map[roleKey]) return map[roleKey];
+  if (rawRole && String(rawRole).trim()) return String(rawRole).trim();
+  return 'Unknown';
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -59,14 +78,17 @@ export default function DashboardPage() {
             <h1 className="truncate text-xl font-semibold text-ds-text dark:text-white sm:text-2xl">
               Welcome, {welcomeFirstName(user)}
             </h1>
+            {(roleKey === 'doctor' || roleKey === 'nurse') && (
+              <p className={`${appMutedText} mt-1 text-sm`}>
+                <span className="font-medium text-ds-text dark:text-slate-200">Department:</span>{' '}
+                {formatDepartmentName(user?.department)}
+              </p>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge variant="soft">{user?.role ?? 'Unknown'}</Badge>
+              <Badge variant="soft">{roleBadgeLabel(roleKey, user?.role)}</Badge>
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <Link to="/mfa-setup" className={appOutlineLink}>
-              Set up 2FA
-            </Link>
             <button
               type="button"
               onClick={handleLogout}
