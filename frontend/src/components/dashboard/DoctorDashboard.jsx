@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useId, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Alert, Badge, Button, Card, Spinner } from '../ui/index.js';
@@ -23,9 +23,10 @@ import {
   updateEhrRecord,
   uploadEhrFile,
 } from '../../lib/api.js';
+import { ToolbarSelectDropdown } from './ToolbarSelectDropdown.jsx';
+import { toolbarDropdownTriggerClass } from './toolbarDropdownPrimitives.jsx';
 
-const BREAK_GLASS_REASONS = [
-  { value: '', label: 'Select reason' },
+const BREAK_GLASS_REASON_OPTIONS = [
   { value: 'Medical emergency', label: 'Medical emergency' },
   { value: 'Patient incapacitated', label: 'Patient incapacitated' },
   { value: 'On-call coverage', label: 'On-call coverage' },
@@ -50,11 +51,80 @@ function TabButton({ id, label, active, onClick }) {
   );
 }
 
+const patientClearBtnClass = [
+  toolbarDropdownTriggerClass,
+  'h-10 w-10 min-h-10 min-w-10 shrink-0 justify-center gap-0 p-0 text-ds-text-muted hover:text-ds-text dark:text-slate-500 dark:hover:text-slate-200',
+].join(' ');
+
+function PatientClearButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      className={patientClearBtnClass}
+      aria-label="Clear selected patient"
+      title="Clear patient"
+      onClick={onClick}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        className="size-[15px] opacity-90"
+        aria-hidden
+      >
+        <path d="M18 6 6 18M6 6l12 12" />
+      </svg>
+    </button>
+  );
+}
+
 const DOCTOR_PATIENT_TABLE_HEAD =
   'grid grid-cols-[minmax(11rem,1.45fr)_minmax(6.5rem,0.65fr)_minmax(7rem,0.55fr)_minmax(9rem,0.85fr)] gap-x-3 items-center';
 
 const PATIENTS_PAGE_SIZE = 10;
 const ACCESS_LOG_PAGE_SIZE = 10;
+
+/** Match NurseDashboard Update Vitals field + input styling (break-glass, EHR, Files). */
+const DOCTOR_FIELD_INPUT = [
+  authInput,
+  '!px-2.5 !py-1.5 !text-sm !leading-snug',
+  'placeholder:text-[11px] placeholder:leading-tight placeholder:text-ds-text-muted/90 dark:placeholder:text-slate-500',
+].join(' ');
+
+const DOCTOR_FIELD_LABEL =
+  'flex flex-col gap-1.5 text-xs font-medium leading-snug text-ds-text-muted dark:text-slate-400';
+
+/** Section labels inside doctor EHR record card (bold); body lines stay muted. */
+const EHR_DETAIL_SECTION_HEAD =
+  'text-sm font-semibold text-ds-text dark:text-white';
+
+/** File row shell aligned to `DOCTOR_FIELD_INPUT` / authInput field chrome. */
+const FILES_CHOOSER_FIELD =
+  'flex h-10 min-w-0 flex-1 items-center gap-2 rounded-ds-input border border-ds-border bg-ds-surface px-2 text-sm shadow-sm transition hover:border-ds-border-strong focus-within:border-ds-primary-soft focus-within:outline-none focus-within:ring-4 focus-within:ring-ds-primary/15 dark:border-slate-600 dark:bg-slate-950 dark:hover:border-slate-500';
+
+const FILES_CHOOSER_BTN =
+  'inline-flex h-7 max-h-7 shrink-0 cursor-pointer items-center rounded border border-ds-border bg-ds-surface-muted px-2 text-[11px] font-semibold text-ds-text shadow-sm transition hover:bg-ds-surface dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700';
+
+/** Patient summary for doctor EHR / Files (includes diagnosis; no attending line). */
+function PatientDetailsStrip({ selectedPatient, diagnosis }) {
+  if (!selectedPatient) return null;
+  const diag =
+    diagnosis != null && String(diagnosis).trim() !== '' ? String(diagnosis).trim() : '—';
+  return (
+    <div className="mt-4">
+      <h3 className="text-sm font-semibold text-ds-text dark:text-white">Patient Details</h3>
+      <div className="mt-2 rounded-ds-card border border-ds-border/70 bg-ds-surface-muted/40 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900/50">
+        <span className="font-medium text-ds-text dark:text-slate-100">{selectedPatient.displayName ?? 'Patient'}</span>
+        <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+        <span className="font-mono text-xs text-ds-text dark:text-slate-200">{selectedPatient.mrn ?? '—'}</span>
+        <span className="mx-2 text-ds-text-muted dark:text-slate-500">|</span>
+        <span className="text-ds-text dark:text-slate-200">Diagnosis: {diag}</span>
+      </div>
+    </div>
+  );
+}
 
 function formatDateTime(value) {
   if (!value) return '—';
@@ -135,8 +205,10 @@ export default function DoctorDashboard() {
 
   const [filesSelected, setFilesSelected] = useState(null);
   const [filesNotice, setFilesNotice] = useState({ variant: '', message: '' });
+  const filesFileInputId = useId();
+  const filesFileInputRef = useRef(null);
 
-  const [bgPatientId, setBgPatientId] = useState('');
+  const [bgMrn, setBgMrn] = useState('');
   const [bgReason, setBgReason] = useState('');
   const [bgDetail, setBgDetail] = useState('');
   const [bgModalOpen, setBgModalOpen] = useState(false);
@@ -170,6 +242,24 @@ export default function DoctorDashboard() {
     return m;
   }, [patients]);
 
+  /** Same pattern as AdminDashboard assign form (toolbar listbox + placeholder). */
+  const patientSelectOptions = useMemo(() => {
+    const base = patients.map((p) => ({
+      value: p.patientId,
+      label: `${p.displayName} (${p.mrn})`,
+    }));
+    const id = String(chartPatientId ?? '').trim();
+    if (!id || base.some((o) => o.value === id)) return base;
+    const sp = patientById.get(id);
+    return [
+      {
+        value: id,
+        label: `${sp?.displayName ?? 'Patient'} (${sp?.mrn ?? id})`,
+      },
+      ...base,
+    ];
+  }, [patients, chartPatientId, patientById]);
+
   const selectedPatient = chartPatientId ? patientById.get(chartPatientId) : null;
   const selectedEhrId = selectedPatient?.latestEhr?.id ?? null;
 
@@ -198,10 +288,16 @@ export default function DoctorDashboard() {
   const updateEhrMutation = useMutation({
     mutationFn: ({ id, payload }) => updateEhrRecord(id, payload),
     onSuccess: () => {
-      setEhrSaveNotice({ variant: 'success', message: 'Record saved successfully.' });
+      const successMsg = 'Record saved successfully.';
+      setEhrSaveNotice({ variant: 'success', message: successMsg });
       setEhrEditMode(false);
       queryClient.invalidateQueries({ queryKey: ['doctorAssignedPatients', doctorId] });
       queryClient.invalidateQueries({ queryKey: ['ehrRecord', selectedEhrId] });
+      window.setTimeout(() => {
+        setEhrSaveNotice((prev) =>
+          prev.variant === 'success' && prev.message === successMsg ? { variant: '', message: '' } : prev,
+        );
+      }, 4500);
     },
     onError: (err) => {
       setEhrSaveNotice({
@@ -216,6 +312,7 @@ export default function DoctorDashboard() {
     onSuccess: () => {
       setFilesNotice({ variant: 'success', message: 'File uploaded successfully' });
       setFilesSelected(null);
+      if (filesFileInputRef.current) filesFileInputRef.current.value = '';
       queryClient.invalidateQueries({ queryKey: ['doctorAssignedPatients', doctorId] });
       queryClient.invalidateQueries({ queryKey: ['ehrRecord', selectedEhrId] });
     },
@@ -234,13 +331,13 @@ export default function DoctorDashboard() {
       setBgNotice({
         variant: 'success',
         message: [
-          `Emergency access granted for patient ${data.patientId ?? variables.patientIdentifier}.`,
+          `Emergency access granted for MRN ${String(variables.patientIdentifier).trim()}.`,
           'This event has been logged and your supervisor notified.',
           `Reason: ${data.reason ?? variables.reason} — ${ts}`,
         ].join(' '),
       });
       setBgModalOpen(false);
-      setBgPatientId('');
+      setBgMrn('');
       setBgReason('');
       setBgDetail('');
       queryClient.invalidateQueries({ queryKey: ['doctorBreakGlassHistory', doctorId] });
@@ -297,7 +394,27 @@ export default function DoctorDashboard() {
     setActiveTab('files');
     setFilesNotice({ variant: '', message: '' });
     setFilesSelected(null);
+    queueMicrotask(() => {
+      if (filesFileInputRef.current) filesFileInputRef.current.value = '';
+    });
   }, []);
+
+  const handleTabChange = useCallback(
+    (next) => {
+      if (next !== activeTab) {
+        setChartPatientId('');
+        setEhrEditMode(false);
+        setEhrSaveNotice({ variant: '', message: '' });
+        setFilesNotice({ variant: '', message: '' });
+        setFilesSelected(null);
+        queueMicrotask(() => {
+          if (filesFileInputRef.current) filesFileInputRef.current.value = '';
+        });
+      }
+      setActiveTab(next);
+    },
+    [activeTab],
+  );
 
   function handleSaveEhr() {
     if (!selectedEhrId) return;
@@ -343,13 +460,19 @@ export default function DoctorDashboard() {
 
   const vDisplay = ehrRecord ? normalizeVitals(ehrRecord.vitals) : normalizeVitals(null);
 
+  const diagnosisForPatientStrip =
+    ehrRecord?.diagnosis ?? selectedPatient?.latestEhr?.diagnosis ?? null;
+
   const bgHistoryRows = useMemo(() => {
     const logs = breakGlassHistoryQuery.data?.logs ?? [];
     return logs.slice(0, 5);
   }, [breakGlassHistoryQuery.data?.logs]);
 
   const bgFormValid =
-    String(bgPatientId).trim().length > 0 && String(bgReason).trim().length > 0 && bgReason !== '';
+    String(bgMrn).trim().length > 0 && String(bgReason).trim().length > 0 && bgReason !== '';
+
+  const filesUploadFormId = 'doctor-medical-files-upload';
+  const filesUploadReady = Boolean(filesStorageAvailable && chartPatientId && selectedEhrId);
 
   return (
     <div>
@@ -400,11 +523,11 @@ export default function DoctorDashboard() {
       </div>
 
       <div className="mb-6 flex flex-wrap gap-1 border-b border-ds-border dark:border-slate-700">
-        <TabButton id="tab-patients" label="My Patients" active={activeTab === 'patients'} onClick={() => setActiveTab('patients')} />
-        <TabButton id="tab-ehr" label="EHR Records" active={activeTab === 'ehr'} onClick={() => setActiveTab('ehr')} />
-        <TabButton id="tab-files" label="Medical Files" active={activeTab === 'files'} onClick={() => setActiveTab('files')} />
-        <TabButton id="tab-bg" label="Break-glass Access" active={activeTab === 'breakglass'} onClick={() => setActiveTab('breakglass')} />
-        <TabButton id="tab-access" label="My Access Log" active={activeTab === 'accesslog'} onClick={() => setActiveTab('accesslog')} />
+        <TabButton id="tab-patients" label="My Patients" active={activeTab === 'patients'} onClick={() => handleTabChange('patients')} />
+        <TabButton id="tab-ehr" label="EHR Records" active={activeTab === 'ehr'} onClick={() => handleTabChange('ehr')} />
+        <TabButton id="tab-files" label="Medical Files" active={activeTab === 'files'} onClick={() => handleTabChange('files')} />
+        <TabButton id="tab-bg" label="Break-glass Access" active={activeTab === 'breakglass'} onClick={() => handleTabChange('breakglass')} />
+        <TabButton id="tab-access" label="My Access Log" active={activeTab === 'accesslog'} onClick={() => handleTabChange('accesslog')} />
       </div>
 
       {activeTab === 'patients' ? (
@@ -508,34 +631,39 @@ export default function DoctorDashboard() {
 
       {activeTab === 'ehr' ? (
         <section className={appPanelCard}>
-          <h2 className={appSectionHeading}>EHR Records</h2>
-          <p className={`${appMutedText} mt-1 mb-4 text-sm`}>Select a patient to view or update their chart.</p>
+          <div className="mb-4 space-y-3">
+            <h2 className={appSectionHeading}>EHR Records</h2>
+            <div className="flex min-w-0 max-w-xl items-center gap-1.5">
+              <div className="min-w-0 flex-1">
+                <ToolbarSelectDropdown
+                  value={chartPatientId}
+                  onChange={(v) => {
+                    setChartPatientId(v);
+                    setEhrEditMode(false);
+                    setEhrSaveNotice({ variant: '', message: '' });
+                  }}
+                  options={patientSelectOptions}
+                  ariaLabel="Select patient"
+                  listAriaLabel="Patients"
+                  placeholderLabel="Select patient"
+                  className="w-full min-w-0"
+                  triggerMinWidthClass="w-full min-w-0"
+                />
+              </div>
+              {chartPatientId ? (
+                <PatientClearButton
+                  onClick={() => {
+                    setChartPatientId('');
+                    setEhrEditMode(false);
+                    setEhrSaveNotice({ variant: '', message: '' });
+                  }}
+                />
+              ) : null}
+            </div>
+          </div>
 
-          <label className="mb-4 flex max-w-md flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
-            Patient
-            <select
-              className={authInput}
-              value={chartPatientId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setChartPatientId(v);
-                setEhrEditMode(false);
-                setEhrSaveNotice({ variant: '', message: '' });
-              }}
-            >
-              <option value="">— Select patient —</option>
-              {patients.map((p) => (
-                <option key={p.patientId} value={p.patientId}>
-                  {p.displayName} ({p.mrn})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {!chartPatientId ? (
-            <p className={`${appMutedText} rounded-ds-card border border-ds-border/60 bg-ds-surface-muted/30 p-6 text-sm dark:border-slate-700`}>
-              Select a patient to view their record.
-            </p>
+          {chartPatientId ? (
+            <PatientDetailsStrip selectedPatient={selectedPatient} diagnosis={diagnosisForPatientStrip} />
           ) : null}
 
           {chartPatientId && !selectedEhrId ? (
@@ -561,107 +689,91 @@ export default function DoctorDashboard() {
 
               {ehrRecord ? (
                 <>
-                  <div className="rounded-ds-input border border-ds-border/70 bg-ds-surface-muted/20 px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-900/30">
-                    <span className="font-semibold text-ds-text dark:text-white">{selectedPatient?.displayName}</span>
-                    <span className="text-ds-text-muted"> · </span>
-                    <span className="text-ds-text dark:text-slate-200">MRN {selectedPatient?.mrn ?? '—'}</span>
-                    <span className="text-ds-text-muted"> · </span>
-                    <span className={appMutedText}>
-                      Assigned since {formatDateTime(selectedPatient?.assignedSince)}
-                    </span>
-                  </div>
-
                   <Card variant="solid" padding="p-5" className="border border-ds-border/60 dark:border-slate-700">
-                    <div className="space-y-3 text-sm">
+                    <div className="space-y-2.5 text-sm">
                       {ehrEditMode ? (
-                        <label className="flex flex-col gap-1 font-medium text-ds-text dark:text-slate-200">
-                          Diagnosis
-                          <textarea
-                            className={`${authInput} min-h-[5rem] resize-y`}
-                            value={editDiagnosis}
-                            onChange={(e) => setEditDiagnosis(e.target.value)}
-                          />
-                        </label>
-                      ) : (
-                        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-                          <span className={appDataLabel}>Diagnosis</span>
-                          <span className={`${appDataValue} sm:flex-1`}>{ehrRecord.diagnosis ?? '—'}</span>
-                        </div>
-                      )}
-
-                      <div>
-                        <div className={appDataLabel}>Vitals</div>
-                        {ehrEditMode ? (
-                          <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                            <label className="flex flex-col gap-1 text-xs text-ds-text-muted dark:text-slate-400">
-                              Systolic
-                              <input
-                                className={authInput}
-                                inputMode="numeric"
-                                value={editVitals.systolic}
-                                onChange={(e) => setEditVitals((s) => ({ ...s, systolic: e.target.value }))}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-xs text-ds-text-muted dark:text-slate-400">
-                              Diastolic
-                              <input
-                                className={authInput}
-                                inputMode="numeric"
-                                value={editVitals.diastolic}
-                                onChange={(e) => setEditVitals((s) => ({ ...s, diastolic: e.target.value }))}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-xs text-ds-text-muted dark:text-slate-400">
-                              Heart rate (bpm)
-                              <input
-                                className={authInput}
-                                inputMode="numeric"
-                                value={editVitals.heartRate}
-                                onChange={(e) => setEditVitals((s) => ({ ...s, heartRate: e.target.value }))}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-xs text-ds-text-muted dark:text-slate-400">
-                              Temperature (°F)
-                              <input
-                                className={authInput}
-                                inputMode="decimal"
-                                value={editVitals.temperature}
-                                onChange={(e) => setEditVitals((s) => ({ ...s, temperature: e.target.value }))}
-                              />
-                            </label>
-                            <label className="flex flex-col gap-1 text-xs text-ds-text-muted dark:text-slate-400">
-                              O₂ saturation (%)
-                              <input
-                                className={authInput}
-                                inputMode="numeric"
-                                value={editVitals.o2}
-                                onChange={(e) => setEditVitals((s) => ({ ...s, o2: e.target.value }))}
-                              />
-                            </label>
+                        <div className="max-w-2xl space-y-2.5">
+                          <div>
+                            <div className={EHR_DETAIL_SECTION_HEAD}>Diagnosis:</div>
+                            <textarea
+                              className={`${DOCTOR_FIELD_INPUT} mt-1.5 min-h-[76px] max-w-xl`}
+                              value={editDiagnosis}
+                              onChange={(e) => setEditDiagnosis(e.target.value)}
+                            />
                           </div>
-                        ) : (
-                          <ul className={`${appMutedText} mt-2 list-inside list-disc space-y-1`}>
-                            <li>
-                              Blood Pressure:{' '}
-                              {vDisplay.systolic != null && vDisplay.diastolic != null
-                                ? `${vDisplay.systolic} / ${vDisplay.diastolic} mmHg`
-                                : '—'}
-                            </li>
-                            <li>Heart Rate: {vDisplay.heartRate != null ? `${vDisplay.heartRate} bpm` : '—'}</li>
-                            <li>Temperature: {vDisplay.temperature != null ? `${vDisplay.temperature} °F` : '—'}</li>
-                            <li>O₂ Saturation: {vDisplay.o2 != null ? `${vDisplay.o2} %` : '—'}</li>
-                          </ul>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-                        <span className={appDataLabel}>Last Updated</span>
-                        <span className={appDataValue}>{formatDateTime(ehrRecord.updatedAt)}</span>
-                      </div>
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
-                        <span className={appDataLabel}>Attending</span>
-                        <span className={appDataValue}>Dr. {ehrRecord.doctor?.email ?? user?.email ?? '—'}</span>
-                      </div>
+                          <div>
+                            <div className={EHR_DETAIL_SECTION_HEAD}>Vitals:</div>
+                            <div className="mt-2 grid max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-x-3 sm:gap-y-2.5">
+                              <label className={`${DOCTOR_FIELD_LABEL} max-w-xl`}>
+                                Systolic
+                                <input
+                                  className={DOCTOR_FIELD_INPUT}
+                                  inputMode="numeric"
+                                  value={editVitals.systolic}
+                                  onChange={(e) => setEditVitals((s) => ({ ...s, systolic: e.target.value }))}
+                                />
+                              </label>
+                              <label className={`${DOCTOR_FIELD_LABEL} max-w-xl`}>
+                                Diastolic
+                                <input
+                                  className={DOCTOR_FIELD_INPUT}
+                                  inputMode="numeric"
+                                  value={editVitals.diastolic}
+                                  onChange={(e) => setEditVitals((s) => ({ ...s, diastolic: e.target.value }))}
+                                />
+                              </label>
+                              <label className={`${DOCTOR_FIELD_LABEL} max-w-xl`}>
+                                Heart rate (bpm)
+                                <input
+                                  className={DOCTOR_FIELD_INPUT}
+                                  inputMode="numeric"
+                                  value={editVitals.heartRate}
+                                  onChange={(e) => setEditVitals((s) => ({ ...s, heartRate: e.target.value }))}
+                                />
+                              </label>
+                              <label className={`${DOCTOR_FIELD_LABEL} max-w-xl`}>
+                                Temperature (°F)
+                                <input
+                                  className={DOCTOR_FIELD_INPUT}
+                                  inputMode="decimal"
+                                  value={editVitals.temperature}
+                                  onChange={(e) => setEditVitals((s) => ({ ...s, temperature: e.target.value }))}
+                                />
+                              </label>
+                              <label className={`${DOCTOR_FIELD_LABEL} max-w-xl`}>
+                                O₂ saturation (%)
+                                <input
+                                  className={DOCTOR_FIELD_INPUT}
+                                  inputMode="numeric"
+                                  value={editVitals.o2}
+                                  onChange={(e) => setEditVitals((s) => ({ ...s, o2: e.target.value }))}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+                            <span className={EHR_DETAIL_SECTION_HEAD}>Last Updated:</span>
+                            <span className={appMutedText}>{formatDateTime(ehrRecord.updatedAt)}</span>
+                          </div>
+                          <div>
+                            <div className={EHR_DETAIL_SECTION_HEAD}>Vitals:</div>
+                            <ul className={`${appMutedText} mt-2 list-inside list-disc space-y-1`}>
+                              <li>
+                                Blood Pressure:{' '}
+                                {vDisplay.systolic != null && vDisplay.diastolic != null
+                                  ? `${vDisplay.systolic} / ${vDisplay.diastolic} mmHg`
+                                  : '—'}
+                              </li>
+                              <li>Heart Rate: {vDisplay.heartRate != null ? `${vDisplay.heartRate} bpm` : '—'}</li>
+                              <li>Temperature: {vDisplay.temperature != null ? `${vDisplay.temperature} °F` : '—'}</li>
+                              <li>O₂ Saturation: {vDisplay.o2 != null ? `${vDisplay.o2} %` : '—'}</li>
+                            </ul>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <p className={`${appMutedText} mt-4 font-mono text-xs`}>EHR ID: {ehrRecord.id}</p>
@@ -674,7 +786,12 @@ export default function DoctorDashboard() {
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {!ehrEditMode ? (
-                        <Button type="button" variant="secondary" onClick={beginEhrEdit}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!h-8 !min-h-0 !px-3 !py-0 !text-xs"
+                          onClick={beginEhrEdit}
+                        >
                           Edit Record
                         </Button>
                       ) : (
@@ -682,6 +799,7 @@ export default function DoctorDashboard() {
                           <Button
                             type="button"
                             variant="primary"
+                            className="!h-8 !min-h-0 !px-3 !py-0 !text-xs"
                             loading={updateEhrMutation.isPending}
                             onClick={handleSaveEhr}
                           >
@@ -689,7 +807,8 @@ export default function DoctorDashboard() {
                           </Button>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="secondary"
+                            className="!h-8 !min-h-0 !px-3 !py-0 !text-xs"
                             disabled={updateEhrMutation.isPending}
                             onClick={() => {
                               setEhrEditMode(false);
@@ -712,101 +831,143 @@ export default function DoctorDashboard() {
 
       {activeTab === 'files' ? (
         <section className={appPanelCard}>
-          <h2 className={appSectionHeading}>Medical Files</h2>
-          <p className={`${appMutedText} mt-1 mb-1 text-sm`}>
-            Files are stored in Supabase Storage (private bucket; short-lived signed URLs for download).
-          </p>
-          {!filesStorageAvailable ? (
-            <Alert variant="error" className="mb-4">
-              Supabase Storage is not configured on the server. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to
-              enable uploads and signed URLs (bucket defaults to 272 unless SUPABASE_STORAGE_BUCKET is set).
-            </Alert>
-          ) : null}
+          <div className="mb-4 space-y-3">
+            <h2 className={appSectionHeading}>Medical Files</h2>
+            {!filesStorageAvailable ? (
+              <Alert variant="error">
+                Supabase Storage is not configured on the server. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to
+                enable uploads and signed URLs (bucket defaults to 272 unless SUPABASE_STORAGE_BUCKET is set).
+              </Alert>
+            ) : null}
+          </div>
 
-          <label className="mb-4 flex max-w-md flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
-            Patient
-            <select
-              className={authInput}
-              value={chartPatientId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setChartPatientId(v);
-                setFilesNotice({ variant: '', message: '' });
-              }}
-            >
-              <option value="">— Select patient —</option>
-              {patients.map((p) => (
-                <option key={p.patientId} value={p.patientId}>
-                  {p.displayName} ({p.mrn})
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex min-w-0 max-w-xl items-center gap-1.5">
+            <div className="min-w-0 flex-1">
+              <ToolbarSelectDropdown
+                value={chartPatientId}
+                onChange={(v) => {
+                  setChartPatientId(v);
+                  setFilesNotice({ variant: '', message: '' });
+                }}
+                options={patientSelectOptions}
+                ariaLabel="Select patient for files"
+                listAriaLabel="Patients"
+                placeholderLabel="Select patient"
+                className="w-full min-w-0"
+                triggerMinWidthClass="w-full min-w-0"
+              />
+            </div>
+            {chartPatientId ? (
+              <PatientClearButton
+                onClick={() => {
+                  setChartPatientId('');
+                  setFilesNotice({ variant: '', message: '' });
+                  setFilesSelected(null);
+                  queueMicrotask(() => {
+                    if (filesFileInputRef.current) filesFileInputRef.current.value = '';
+                  });
+                }}
+              />
+            ) : null}
+          </div>
 
-          {!chartPatientId ? (
-            <p className={`${appMutedText} rounded-ds-card border border-ds-border/60 bg-ds-surface-muted/30 p-6 text-sm dark:border-slate-700`}>
-              Select a patient from My Patients to manage their files.
-            </p>
+          {chartPatientId ? (
+            <PatientDetailsStrip selectedPatient={selectedPatient} diagnosis={diagnosisForPatientStrip} />
           ) : null}
 
           {chartPatientId && !selectedEhrId ? (
-            <Alert variant="info">This patient does not have an EHR record yet; files attach to an EHR record.</Alert>
+            <Alert variant="info" className="mt-2">
+              This patient does not have an EHR record yet; files attach to an EHR record.
+            </Alert>
+          ) : null}
+
+          {chartPatientId ? (
+            <form id={filesUploadFormId} className="mt-4 max-w-2xl space-y-2" onSubmit={handleFilesUpload}>
+              <h3 className="text-sm font-semibold text-ds-text dark:text-white">Upload File</h3>
+              <div className="mt-2 flex min-w-0 items-stretch gap-2">
+                <input
+                  ref={filesFileInputRef}
+                  id={filesFileInputId}
+                  type="file"
+                  className="sr-only"
+                  disabled={!filesUploadReady}
+                  onChange={(e) => setFilesSelected(e.target.files?.[0] ?? null)}
+                />
+                <div
+                  className={[
+                    FILES_CHOOSER_FIELD,
+                    !filesUploadReady ? 'pointer-events-none opacity-60' : '',
+                  ].join(' ')}
+                >
+                  <label
+                    htmlFor={filesFileInputId}
+                    className={[FILES_CHOOSER_BTN, !filesUploadReady ? 'cursor-not-allowed' : ''].join(' ')}
+                  >
+                    Choose File
+                  </label>
+                  <span className="min-w-0 flex-1 truncate text-left text-xs text-ds-text-muted dark:text-slate-400">
+                    {filesSelected?.name ?? 'No file selected'}
+                  </span>
+                </div>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  className="!h-10 !max-h-10 !min-h-0 shrink-0 self-stretch !px-4 !py-0 !text-xs"
+                  loading={uploadMutation.isPending}
+                  spinner="dark"
+                  disabled={!filesUploadReady}
+                  title={
+                    !filesUploadReady
+                      ? 'Patient needs an EHR record before you can upload files'
+                      : undefined
+                  }
+                >
+                  Upload
+                </Button>
+              </div>
+              {filesSelected ? (
+                <p className={`${appMutedText} text-xs`}>Selected: {filesSelected.name}</p>
+              ) : null}
+              {uploadMutation.isPending ? (
+                <div className="flex items-center gap-2 text-sm text-ds-text-muted">
+                  <Spinner size="sm" />
+                  Uploading…
+                </div>
+              ) : null}
+            </form>
           ) : null}
 
           {chartPatientId && selectedEhrId ? (
-            <div className="mt-4 space-y-6">
-              <div>
-                <h3 className="text-sm font-semibold text-ds-text dark:text-white">Current files</h3>
-                {ehrRecord?.s3FileKey ? (
-                  <div className="mt-2 rounded-ds-input border border-ds-border/60 px-4 py-3 dark:border-slate-700">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <div className={appDataValue}>{filenameFromStoragePath(ehrRecord.s3FileKey)}</div>
-                        <div className={`${appMutedText} text-xs`}>Uploaded (key last modified): {formatDateTime(ehrRecord.updatedAt)}</div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="!h-8 !min-h-0 !px-3 !py-0 !text-xs"
-                        disabled={!filesStorageAvailable}
-                        onClick={handleOpenFile}
-                      >
-                        View
-                      </Button>
+            <div className="mt-6">
+              <h3 className="text-sm font-semibold text-ds-text dark:text-white">Current Files</h3>
+              {ehrRecord?.s3FileKey ? (
+                <div className="mt-2 rounded-ds-input border border-ds-border/60 px-4 py-3 dark:border-slate-700">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className={appDataValue}>{filenameFromStoragePath(ehrRecord.s3FileKey)}</div>
+                      <div className={`${appMutedText} text-xs`}>Uploaded (key last modified): {formatDateTime(ehrRecord.updatedAt)}</div>
                     </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="!h-8 !min-h-0 !px-3 !py-0 !text-xs"
+                      disabled={!filesStorageAvailable}
+                      onClick={handleOpenFile}
+                    >
+                      View
+                    </Button>
                   </div>
-                ) : (
-                  <p className={`${appMutedText} mt-2`}>No files uploaded for this patient yet.</p>
-                )}
-              </div>
-
-              <div>
-                <h3 className="text-sm font-semibold text-ds-text dark:text-white">Upload new file</h3>
-                <form className="mt-3 max-w-lg space-y-3" onSubmit={handleFilesUpload}>
-                  <label className="text-sm font-medium text-ds-text dark:text-slate-200">Upload Medical Document</label>
-                  <input
-                    type="file"
-                    className={authInput}
-                    onChange={(e) => setFilesSelected(e.target.files?.[0] ?? null)}
-                  />
-                  <p className={appMutedText}>{filesSelected ? `Selected: ${filesSelected.name}` : 'No file selected'}</p>
-                  <Button type="submit" variant="secondary" loading={uploadMutation.isPending} spinner="dark" disabled={!filesStorageAvailable}>
-                    Upload
-                  </Button>
-                  {uploadMutation.isPending ? (
-                    <div className="flex items-center gap-2 text-sm text-ds-text-muted">
-                      <Spinner size="sm" />
-                      Uploading…
-                    </div>
-                  ) : null}
-                </form>
-                {filesNotice.message ? (
-                  <Alert variant={filesNotice.variant || 'info'} className="mt-3">
-                    {filesNotice.message}
-                  </Alert>
-                ) : null}
-              </div>
+                </div>
+              ) : (
+                <p className={`${appMutedText} mt-2`}>No files uploaded for this patient yet.</p>
+              )}
             </div>
+          ) : null}
+
+          {filesNotice.message ? (
+            <Alert variant={filesNotice.variant || 'info'} className="mt-3">
+              {filesNotice.message}
+            </Alert>
           ) : null}
         </section>
       ) : null}
@@ -830,30 +991,38 @@ export default function DoctorDashboard() {
 
           <section className={appPanelCard}>
             <h2 className={appSectionHeading}>Request emergency access</h2>
-            <div className="mt-4 max-w-lg space-y-4">
-              <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
-                Patient ID or MRN
+            <div className="mt-4 max-w-2xl space-y-2.5">
+              <label className={`${DOCTOR_FIELD_LABEL} max-w-xl`}>
+                Medical record number (MRN)
                 <input
-                  className={authInput}
-                  value={bgPatientId}
-                  onChange={(e) => setBgPatientId(e.target.value)}
-                  placeholder="UUID or medical record number"
+                  className={DOCTOR_FIELD_INPUT}
+                  value={bgMrn}
+                  onChange={(e) => setBgMrn(e.target.value)}
+                  placeholder="Enter patient MRN"
+                  autoComplete="off"
                 />
               </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
-                Reason
-                <select className={authInput} value={bgReason} onChange={(e) => setBgReason(e.target.value)}>
-                  {BREAK_GLASS_REASONS.map((o) => (
-                    <option key={o.label} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+
+              <div className="flex min-w-0 max-w-xl flex-col gap-1 text-xs font-medium text-ds-text-muted dark:text-slate-400">
+                <span>Reason</span>
+                <div className="min-w-0 flex-1">
+                  <ToolbarSelectDropdown
+                    value={bgReason}
+                    onChange={setBgReason}
+                    options={BREAK_GLASS_REASON_OPTIONS}
+                    ariaLabel="Break-glass reason"
+                    listAriaLabel="Reasons"
+                    placeholderLabel="Select reason"
+                    className="w-full min-w-0"
+                    triggerMinWidthClass="w-full min-w-0"
+                  />
+                </div>
+              </div>
+
+              <label className={`${DOCTOR_FIELD_LABEL} max-w-xl`}>
                 Additional details (optional)
                 <textarea
-                  className={`${authInput} min-h-[4rem]`}
+                  className={`${DOCTOR_FIELD_INPUT} min-h-[76px]`}
                   value={bgDetail}
                   onChange={(e) => setBgDetail(e.target.value)}
                   placeholder="Additional details (optional)"
@@ -940,8 +1109,8 @@ export default function DoctorDashboard() {
                   <div>
                     <h3 className="text-lg font-semibold text-ds-text dark:text-white">Confirm Emergency Access</h3>
                     <p className={`${appMutedText} mt-2 text-sm`}>
-                      You are about to access records for patient{' '}
-                      <span className="font-mono text-ds-text dark:text-slate-200">{String(bgPatientId).trim()}</span>.
+                      You are about to access records for patient MRN{' '}
+                      <span className="font-mono text-ds-text dark:text-slate-200">{String(bgMrn).trim()}</span>.
                     </p>
                     <p className={`${appMutedText} mt-2 text-sm`}>
                       Reason: <span className="text-ds-text dark:text-slate-200">{bgReason}</span>
@@ -960,7 +1129,7 @@ export default function DoctorDashboard() {
                     loading={breakGlassMutation.isPending}
                     onClick={() => {
                       breakGlassMutation.mutate({
-                        patientIdentifier: String(bgPatientId).trim(),
+                        patientIdentifier: String(bgMrn).trim(),
                         reason: bgReason,
                         reasonDetail: bgDetail.trim() || undefined,
                       });

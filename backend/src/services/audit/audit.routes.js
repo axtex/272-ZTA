@@ -87,11 +87,22 @@ router.get('/my-login-activity', verifyToken, verifyRole('patient'), async (req,
   if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  const rows = await prisma.auditLog.findMany({
-    where: { userId, action: 'LOGIN_SUCCESS' },
-    orderBy: { timestamp: 'desc' },
-    take: 50,
-  });
+  const takeParsed = parseInt(String(req.query.take ?? '10'), 10);
+  const take = Number.isFinite(takeParsed) ? Math.min(MAX_TAKE, Math.max(1, takeParsed)) : 10;
+  const skipParsed = parseInt(String(req.query.skip ?? '0'), 10);
+  const skip = Number.isFinite(skipParsed) && skipParsed >= 0 ? skipParsed : 0;
+
+  const where = { userId, action: 'LOGIN_SUCCESS' };
+  const [total, rows] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take,
+      skip,
+    }),
+  ]);
+
   return res.status(200).json({
     logs: rows.map((l) => ({
       id: l.id,
@@ -100,6 +111,9 @@ router.get('/my-login-activity', verifyToken, verifyRole('patient'), async (req,
       ipAddress: l.ipAddress,
       deviceLabel: shortDeviceLabelFromDetails(l.details),
     })),
+    total,
+    take,
+    skip,
   });
 });
 
