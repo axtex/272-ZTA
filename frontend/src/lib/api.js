@@ -188,6 +188,7 @@ export async function getNurseAccessLog(params = {}) {
 /**
  * POST /api/v2/doctor/break-glass
  * @param {{ patientIdentifier: string; reason: string; reasonDetail?: string }} body
+ *   `patientIdentifier` must be the patient medical record number (MRN), not a UUID.
  */
 export async function requestDoctorBreakGlass(body) {
   const response = await api.post('/api/v2/doctor/break-glass', body);

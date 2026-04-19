@@ -197,6 +197,7 @@ router.post(
         reasonDetail: req.body?.reasonDetail,
         requestingUser: req.user,
         ipAddress: ip,
+        patientLookup: 'mrnOnly',
       });
       return res.status(200).json(result);
     } catch (err) {

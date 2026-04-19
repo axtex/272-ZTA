@@ -40,6 +40,20 @@ async function resolvePatientByIdentifier(raw) {
   throw makeError('Patient not found', 404);
 }
 
+/** Doctor break-glass: MRN lookup only (UUIDs are rejected so staff cannot paste internal IDs). */
+async function resolvePatientByMrnOnly(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) throw makeError('Medical record number is required', 400);
+  if (UUID_RE.test(s)) {
+    throw makeError('Use the patient medical record number (MRN), not an internal patient ID', 400);
+  }
+  const byMrn = await prisma.patient.findFirst({
+    where: { medicalRecordNumber: s },
+  });
+  if (byMrn) return byMrn;
+  throw makeError('Patient not found for this MRN', 404);
+}
+
 function filterRecordForRole(record, role) {
   if (role === 'doctor') return record;
   if (role === 'nurse') {
@@ -196,11 +210,21 @@ async function getPatientProfileSelf(requestingUser) {
   };
 }
 
-async function breakGlassEmergency({ patientIdentifier, reason, reasonDetail, requestingUser, ipAddress }) {
+async function breakGlassEmergency({
+  patientIdentifier,
+  reason,
+  reasonDetail,
+  requestingUser,
+  ipAddress,
+  patientLookup = 'flexible',
+}) {
   const role = tokenRoleKey(requestingUser);
   if (role !== 'doctor') throw makeError('Access denied', 403);
 
-  const patient = await resolvePatientByIdentifier(patientIdentifier);
+  const patient =
+    patientLookup === 'mrnOnly'
+      ? await resolvePatientByMrnOnly(patientIdentifier)
+      : await resolvePatientByIdentifier(patientIdentifier);
   const uid = tokenUserId(requestingUser);
   const reasonNorm = typeof reason === 'string' && reason.trim() ? reason.trim() : 'Medical emergency';
   const details = {
