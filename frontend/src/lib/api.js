@@ -80,12 +80,23 @@ export async function getPatientProfileMe() {
 }
 
 /**
- * GET /audit/my-login-activity — patient-only recent sign-in audit rows.
- * @returns {Promise<Array<{ id: string, timestamp: string, actionLabel: string, ipAddress: string | null, deviceLabel: string }>>}
+ * GET /audit/my-login-activity — patient-only sign-in audit rows (paginated).
+ * @param {{ skip?: number, take?: number }} [params]
+ * @returns {Promise<{ logs: Array<{ id: string, timestamp: string, actionLabel: string, ipAddress: string | null, deviceLabel: string }>, total: number, take: number, skip: number }>}
  */
-export async function getPatientMyLoginActivity() {
-  const response = await api.get('/audit/my-login-activity');
-  return Array.isArray(response.data?.logs) ? response.data.logs : [];
+export async function getPatientMyLoginActivity(params = {}) {
+  const skip = Number.isFinite(Number(params.skip)) ? Math.max(0, Math.floor(Number(params.skip))) : 0;
+  const take = Number.isFinite(Number(params.take)) ? Math.max(1, Math.floor(Number(params.take))) : 10;
+  const response = await api.get('/audit/my-login-activity', { params: { skip, take } });
+  const d = response.data ?? {};
+  const logs = Array.isArray(d.logs) ? d.logs : [];
+  const total = typeof d.total === 'number' ? d.total : logs.length;
+  return {
+    logs,
+    total,
+    take: typeof d.take === 'number' ? d.take : take,
+    skip: typeof d.skip === 'number' ? d.skip : skip,
+  };
 }
 
 /**

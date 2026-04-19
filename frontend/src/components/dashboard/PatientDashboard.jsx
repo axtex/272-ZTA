@@ -20,6 +20,18 @@ import {
 } from '../../lib/api.js';
 
 const LIST_PAGE_SIZE = 10;
+const LOGIN_ACTIVITY_PAGE_SIZE = 10;
+/** Static demo past visits for appointments tab (paginated client-side). */
+const PAST_APPOINTMENTS_PAGE_SIZE = 5;
+const DEMO_PAST_APPOINTMENTS = [
+  { id: 'p1', date: 'November 15, 2024', type: 'Follow-up' },
+  { id: 'p2', date: 'October 3, 2024', type: 'Initial consultation' },
+  { id: 'p3', date: 'September 12, 2024', type: 'Annual check-up' },
+  { id: 'p4', date: 'August 1, 2024', type: 'Lab results review' },
+  { id: 'p5', date: 'July 18, 2024', type: 'Follow-up' },
+  { id: 'p6', date: 'June 5, 2024', type: 'Cardiology consult' },
+  { id: 'p7', date: 'May 22, 2024', type: 'Vaccination' },
+];
 const DEMO_HOSPITAL = 'Demo General Hospital';
 const DEMO_DOB = 'March 12, 1978';
 const DEMO_BLOOD = 'O+';
@@ -197,6 +209,8 @@ export default function PatientDashboard() {
   const [activeTab, setActiveTab] = useState('summary');
   const [medicalPage, setMedicalPage] = useState(1);
   const [docsPage, setDocsPage] = useState(1);
+  const [loginActivityPage, setLoginActivityPage] = useState(1);
+  const [pastAppointmentsPage, setPastAppointmentsPage] = useState(1);
   const [docError, setDocError] = useState('');
   const [docLoadingByEhrId, setDocLoadingByEhrId] = useState({});
 
@@ -212,10 +226,13 @@ export default function PatientDashboard() {
     queryFn: getMyPatientEhr,
   });
 
+  const loginActivitySkip = (Math.max(1, loginActivityPage) - 1) * LOGIN_ACTIVITY_PAGE_SIZE;
   const loginActivityQuery = useQuery({
-    queryKey: ['patientMyLoginActivity'],
+    queryKey: ['patientMyLoginActivity', loginActivityPage],
     enabled: isPatient && activeTab === 'privacy',
-    queryFn: getPatientMyLoginActivity,
+    queryFn: () =>
+      getPatientMyLoginActivity({ skip: loginActivitySkip, take: LOGIN_ACTIVITY_PAGE_SIZE }),
+    placeholderData: (previousData) => previousData,
   });
 
   const profile = profileQuery.data ?? null;
@@ -271,6 +288,19 @@ export default function PatientDashboard() {
     return docs.slice(start, start + LIST_PAGE_SIZE);
   }, [docs, docsPageSafe]);
 
+  const pastAppointmentsTotalPages = Math.max(
+    1,
+    Math.ceil(DEMO_PAST_APPOINTMENTS.length / PAST_APPOINTMENTS_PAGE_SIZE),
+  );
+  const pastAppointmentsPageSafe = Math.min(
+    Math.max(1, pastAppointmentsPage),
+    pastAppointmentsTotalPages,
+  );
+  const pastAppointmentsPageRows = useMemo(() => {
+    const start = (pastAppointmentsPageSafe - 1) * PAST_APPOINTMENTS_PAGE_SIZE;
+    return DEMO_PAST_APPOINTMENTS.slice(start, start + PAST_APPOINTMENTS_PAGE_SIZE);
+  }, [pastAppointmentsPageSafe]);
+
   async function handleViewDocument(ehrId) {
     setDocError('');
     const id = String(ehrId ?? '').trim();
@@ -291,7 +321,13 @@ export default function PatientDashboard() {
   const attendingName = (r) =>
     r?.doctorDisplayName?.trim() || user?.assignedDoctorName?.trim() || DEMO_FALLBACK_DOCTOR;
 
-  const loginLogs = Array.isArray(loginActivityQuery.data) ? loginActivityQuery.data : [];
+  const loginActivityPayload = loginActivityQuery.data;
+  const loginLogs = useMemo(
+    () => (Array.isArray(loginActivityPayload?.logs) ? loginActivityPayload.logs : []),
+    [loginActivityPayload],
+  );
+  const loginActivityTotal =
+    typeof loginActivityPayload?.total === 'number' ? loginActivityPayload.total : 0;
 
   return (
     <div>
@@ -319,7 +355,7 @@ export default function PatientDashboard() {
           </p>
         </div>
         <div className="rounded-ds-card border border-ds-border/60 bg-ds-surface/80 p-4 dark:border-slate-700/60 dark:bg-slate-800/60">
-          <p className={appDataLabel}>My Documents</p>
+          <p className={appDataLabel}>My Files</p>
           <p className="mt-1 text-2xl font-semibold text-ds-text dark:text-white">
             {recordsQuery.isLoading ? '—' : docs.length}
           </p>
@@ -362,8 +398,8 @@ export default function PatientDashboard() {
           onClick={() => setActiveTab('medical')}
         />
         <TabButton
-          id="tab-patient-documents"
-          label="My Documents"
+          id="tab-patient-files"
+          label="My Files"
           active={activeTab === 'documents'}
           onClick={() => setActiveTab('documents')}
         />
@@ -374,17 +410,17 @@ export default function PatientDashboard() {
           onClick={() => setActiveTab('appointments')}
         />
         <TabButton
-          id="tab-patient-privacy"
-          label="My Privacy & Security"
+          id="tab-patient-security-logs"
+          label="My Security Logs"
           active={activeTab === 'privacy'}
           onClick={() => setActiveTab('privacy')}
         />
       </div>
 
       {activeTab === 'summary' ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="space-y-4">
-            <section className={appPanelCard} role="tabpanel" aria-labelledby="tab-patient-summary">
+        <div className="space-y-4" role="tabpanel" aria-labelledby="tab-patient-summary">
+          <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+            <section className={`${appPanelCard} flex h-full min-h-0 flex-col`}>
               <h2 className={appSectionHeading}>Personal Info</h2>
               <dl className="mt-4 space-y-3">
                 <div className={appDataRow}>
@@ -404,9 +440,10 @@ export default function PatientDashboard() {
                   <dd className={`${appDataValue} text-right`}>{DEMO_BLOOD}</dd>
                 </div>
               </dl>
+              <div className="min-h-0 flex-1" aria-hidden />
             </section>
 
-            <section className={appPanelCard}>
+            <section className={`${appPanelCard} flex h-full min-h-0 flex-col`}>
               <h2 className={appSectionHeading}>Care Team</h2>
               <dl className="mt-4 space-y-3">
                 <div className={appDataRow}>
@@ -422,19 +459,14 @@ export default function PatientDashboard() {
                   <dd className={`${appDataValue} text-right`}>{DEMO_HOSPITAL}</dd>
                 </div>
               </dl>
-              <div className={`${appMutedText} mt-5 space-y-2 border-t border-ds-border/60 pt-4 text-xs dark:border-slate-700`}>
-                <p className="font-medium text-ds-text dark:text-slate-200">What you cannot see in this portal</p>
-                <ul className="space-y-1">
-                  <li>✗ Doctor&apos;s phone number</li>
-                  <li>✗ Doctor&apos;s personal email</li>
-                  <li>✗ Other patients&apos; doctors</li>
-                </ul>
-                <p className="mt-3 text-sm">Contact the hospital reception to reach your care team.</p>
-              </div>
+              <div className="min-h-0 flex-1" aria-hidden />
+              <p className={`${appMutedText} pt-4 text-sm`}>
+                Contact the hospital reception to reach your care team.
+              </p>
             </section>
           </div>
 
-          <section className={appPanelCard}>
+          <section className={`${appPanelCard} w-full`}>
             <h2 className={appSectionHeading}>Latest Vitals</h2>
             {recordsQuery.isLoading ? (
               <div className="mt-4 flex items-center gap-2">
@@ -617,8 +649,8 @@ export default function PatientDashboard() {
       ) : null}
 
       {activeTab === 'documents' ? (
-        <section className={appPanelCard} role="tabpanel" aria-labelledby="tab-patient-documents">
-          <h2 className={appSectionHeading}>My Documents</h2>
+        <section className={appPanelCard} role="tabpanel" aria-labelledby="tab-patient-files">
+          <h2 className={appSectionHeading}>My Files</h2>
           <div className="mt-4">
             {profileQuery.isSuccess && !filesStorageReady ? (
               <Alert variant="info">
@@ -642,7 +674,7 @@ export default function PatientDashboard() {
             !recordsQuery.isError &&
             records.length > 0 &&
             docs.length === 0 ? (
-              <p className={`${appMutedText} mt-3`}>No documents on file yet.</p>
+              <p className={`${appMutedText} mt-3`}>No files on profile yet.</p>
             ) : null}
             {filesStorageReady && !recordsQuery.isLoading && docs.length > 0 ? (
               <div className="mt-3 space-y-3">
@@ -762,10 +794,39 @@ export default function PatientDashboard() {
             </div>
             <div>
               <h3 className="text-sm font-semibold text-ds-text dark:text-white">Past</h3>
-              <ul className={`${appMutedText} mt-3 space-y-2 text-sm`}>
-                <li>November 15, 2024 — Follow-up — Completed</li>
-                <li>October 3, 2024 — Initial consultation — Completed</li>
+              <ul className="mt-3 space-y-3">
+                {pastAppointmentsPageRows.map((appt) => (
+                  <li key={appt.id} className={appPanelCard}>
+                    <p className="font-medium text-ds-text dark:text-white">{appt.date}</p>
+                    <p className={`${appMutedText} mt-1 text-sm`}>{appt.type}</p>
+                  </li>
+                ))}
               </ul>
+              <div className="mt-3 flex items-center justify-end gap-2">
+                <span className={`${appMutedText} text-xs`}>
+                  Page {pastAppointmentsPageSafe} of {pastAppointmentsTotalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!h-7 !min-h-[1.75rem] !rounded-md !px-2 !py-0 !text-xs"
+                  disabled={pastAppointmentsPageSafe <= 1}
+                  onClick={() => setPastAppointmentsPage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="!h-7 !min-h-[1.75rem] !rounded-md !px-2 !py-0 !text-xs"
+                  disabled={pastAppointmentsPageSafe >= pastAppointmentsTotalPages}
+                  onClick={() =>
+                    setPastAppointmentsPage((p) => Math.min(pastAppointmentsTotalPages, p + 1))
+                  }
+                >
+                  Next
+                </Button>
+              </div>
             </div>
             <p className={`${appMutedText} text-sm leading-relaxed`}>
               To schedule or cancel appointments, please contact the hospital reception at (555) 000-0000.
@@ -775,54 +836,7 @@ export default function PatientDashboard() {
       ) : null}
 
       {activeTab === 'privacy' ? (
-        <div className="space-y-6" role="tabpanel" aria-labelledby="tab-patient-privacy">
-          <section className={appPanelCard}>
-            <h2 className={appSectionHeading}>My login activity</h2>
-            <p className={`${appMutedText} mt-1 text-sm`}>Recent sign-in activity for your account.</p>
-            {loginActivityQuery.isLoading ? (
-              <div className="mt-4 flex items-center gap-2">
-                <Spinner size="sm" />
-                <span className={appMutedText}>Loading activity…</span>
-              </div>
-            ) : null}
-            {!loginActivityQuery.isLoading && loginLogs.length === 0 ? (
-              <p className={`${appMutedText} mt-4 text-sm`}>
-                No sign-in history yet. Successful sign-ins will appear here after your next login.
-              </p>
-            ) : null}
-            {!loginActivityQuery.isLoading && loginLogs.length > 0 ? (
-              <div className="mt-4 overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-ds-border/70 dark:border-slate-600">
-                      <th className={`${appDataLabel} py-2 pr-4`}>Date/Time</th>
-                      <th className={`${appDataLabel} py-2 pr-4`}>Action</th>
-                      <th className={`${appDataLabel} py-2 pr-4`}>IP Address</th>
-                      <th className={`${appDataLabel} py-2`}>Device</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loginLogs.map((row) => (
-                      <tr key={row.id} className="border-b border-ds-border/40 dark:border-slate-700/50">
-                        <td className="py-2 pr-4 text-ds-text dark:text-slate-100">
-                          {formatShortDateTime(row.timestamp)}
-                        </td>
-                        <td className="py-2 pr-4 text-ds-text dark:text-slate-100">{row.actionLabel}</td>
-                        <td className="py-2 pr-4 font-mono text-xs text-ds-text dark:text-slate-200">
-                          {row.ipAddress ?? '—'}
-                        </td>
-                        <td className="py-2 text-ds-text dark:text-slate-100">{row.deviceLabel}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-            <p className={`${appMutedText} mt-4 text-xs leading-relaxed`}>
-              If you see activity you don&apos;t recognise, contact the hospital IT security team immediately.
-            </p>
-          </section>
-
+        <div className="space-y-6" role="tabpanel" aria-labelledby="tab-patient-security-logs">
           <section className={appPanelCard}>
             <h2 className={appSectionHeading}>Two-factor authentication</h2>
             {user?.mfaEnabled ? (
@@ -836,11 +850,11 @@ export default function PatientDashboard() {
                 <p className={`${appMutedText} mt-3 text-sm`}>
                   Your account is protected with an authenticator app.
                 </p>
-                <div className="mt-4">
+                <div className="mt-2">
                   <Button
                     type="button"
                     variant="secondary"
-                    className="!text-sm"
+                    className="!gap-1 !rounded-md !px-2.5 !py-1 !text-xs !font-medium !shadow-none"
                     onClick={() => navigate('/mfa-setup')}
                   >
                     Manage 2FA
@@ -870,6 +884,104 @@ export default function PatientDashboard() {
                 </div>
               </div>
             )}
+          </section>
+
+          <section className={appPanelCard}>
+            <h2 className={appSectionHeading}>My login activity</h2>
+            <p className={`${appMutedText} mt-1 text-sm`}>Recent sign-in activity for your account.</p>
+            <div className="mt-4">
+              {loginActivityQuery.isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Spinner size="sm" />
+                  <span className={appMutedText}>Loading activity…</span>
+                </div>
+              ) : null}
+
+              {loginActivityQuery.isError ? (
+                <Alert variant="error" className="mt-1">
+                  {loginActivityQuery.error?.response?.data?.error ||
+                    loginActivityQuery.error?.message ||
+                    'Failed to load sign-in activity. Try again later.'}
+                </Alert>
+              ) : null}
+
+              {!loginActivityQuery.isLoading && !loginActivityQuery.isError && loginActivityTotal > 0 ? (
+                <p className={`${appMutedText} mb-3`}>
+                  Showing {loginLogs.length} of {loginActivityTotal} sign-in
+                  {loginActivityTotal === 1 ? '' : 's'}
+                </p>
+              ) : null}
+
+              {!loginActivityQuery.isLoading && !loginActivityQuery.isError && loginActivityTotal === 0 ? (
+                <p className={`${appMutedText} text-sm`}>
+                  No sign-in history yet. Successful sign-ins will appear here after your next login.
+                </p>
+              ) : null}
+
+              {!loginActivityQuery.isLoading && !loginActivityQuery.isError && loginActivityTotal > 0 ? (
+                <div className="mt-1 overflow-x-auto rounded-lg border border-ds-border/70 dark:border-slate-700/80">
+                  <table className="min-w-full border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-ds-border/80 bg-ds-surface/90 dark:border-slate-700 dark:bg-slate-900/80">
+                        <th className={`${appDataLabel} px-3 py-2.5 font-semibold`}>Date/Time</th>
+                        <th className={`${appDataLabel} px-3 py-2.5 font-semibold`}>Action</th>
+                        <th className={`${appDataLabel} px-3 py-2.5 font-semibold`}>IP Address</th>
+                        <th className={`${appDataLabel} px-3 py-2.5 font-semibold`}>Device</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loginLogs.map((row) => (
+                        <tr
+                          key={row.id}
+                          className="border-b border-ds-border/50 last:border-0 dark:border-slate-800/80"
+                        >
+                          <td className={`${appDataValue} px-3 py-2 align-top`}>
+                            {formatShortDateTime(row.timestamp)}
+                          </td>
+                          <td className={`${appDataValue} px-3 py-2 align-top`}>{row.actionLabel}</td>
+                          <td className="px-3 py-2 align-top font-mono text-xs text-ds-text dark:text-slate-200">
+                            {row.ipAddress ?? '—'}
+                          </td>
+                          <td className={`${appDataValue} px-3 py-2 align-top`}>{row.deviceLabel}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {(() => {
+                    const totalPages = Math.max(1, Math.ceil(loginActivityTotal / LOGIN_ACTIVITY_PAGE_SIZE));
+                    const pageSafe = Math.min(Math.max(1, loginActivityPage), totalPages);
+                    return (
+                      <div className="flex items-center justify-end gap-2 border-t border-ds-border/60 px-3 py-2.5 dark:border-slate-800/80">
+                        <span className={`${appMutedText} text-xs`}>
+                          Page {pageSafe} of {totalPages}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!h-7 !min-h-[1.75rem] !rounded-md !px-2 !py-0 !text-xs"
+                          disabled={pageSafe <= 1 || loginActivityQuery.isFetching}
+                          onClick={() => setLoginActivityPage((p) => Math.max(1, p - 1))}
+                        >
+                          Prev
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="!h-7 !min-h-[1.75rem] !rounded-md !px-2 !py-0 !text-xs"
+                          disabled={pageSafe >= totalPages || loginActivityQuery.isFetching}
+                          onClick={() => setLoginActivityPage((p) => Math.min(totalPages, p + 1))}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : null}
+            </div>
+            <p className={`${appMutedText} mt-4 text-xs leading-relaxed`}>
+              If you see activity you don&apos;t recognise, contact the hospital IT security team immediately.
+            </p>
           </section>
         </div>
       ) : null}

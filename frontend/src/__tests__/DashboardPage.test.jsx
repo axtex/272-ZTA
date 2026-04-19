@@ -119,7 +119,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('System Overview')).toBeInTheDocument();
     expect(screen.getByText('My Health Summary')).toBeInTheDocument();
     expect(screen.getByText('My Medical Records')).toBeInTheDocument();
-    expect(screen.getAllByText('My Documents').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('My Files').length).toBeGreaterThan(0);
   });
 
   it('shows assigned doctor name in patient overview when set', () => {
